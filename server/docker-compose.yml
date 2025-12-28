@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  oracle-db:
+    image: container-registry.oracle.com/database/free:23.6.0.0
+    container_name: oracle23ai
+    hostname: oracle23ai
+    ports:
+      - "1521:1521"   # Oracle Listener
+      - "5500:5500"   # Enterprise Manager Express (EM Express)
+    environment:
+      # Password cho SYS, SYSTEM và PDBADMIN
+      ORACLE_PWD: "Oracle123"
+      # Tên Pluggable Database
+      ORACLE_PDB: "THUVIEN_PDB"
+      # Character set
+      ORACLE_CHARACTERSET: "AL32UTF8"
+    volumes:
+      # Persistent data
+      - oracle_data:/opt/oracle/oradata
+      # Scripts khởi tạo (nếu có)
+      - ./scripts/startup:/opt/oracle/scripts/startup
+      - ./scripts/setup:/opt/oracle/scripts/setup
+    healthcheck:
+      test: ["CMD", "sqlplus", "-L", "sys/Oracle123@//localhost:1521/THUVIEN_PDB as sysdba", "@/opt/oracle/checkDBStatus.sql"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+    restart: unless-stopped
+    # Giới hạn tài nguyên (tuỳ chỉnh theo máy)
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+volumes:
+  oracle_data:
+    driver: local
