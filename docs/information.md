@@ -64,18 +64,58 @@ Hệ thống **Thư viện** với các loại người dùng:
 
 ### 🔐 Mô hình kiểm soát truy cập
 
-Đồ án áp dụng kết hợp các mô hình (**Không sử dụng DAC**):
+Đồ án áp dụng kết hợp các mô hình:
 
 | Mô hình | Mô tả | Cách áp dụng |
 |---------|-------|--------------|
-| **MAC** (Mandatory Access Control) | Kiểm soát truy cập bắt buộc dựa trên nhãn bảo mật | Oracle Label Security (OLS) |
+| **DAC** (Discretionary Access Control) | Kiểm soát truy cập tùy ý do chủ sở hữu quyết định | GRANT/REVOKE quyền, Oracle Profiles |
+| **MAC** (Mandatory Access Control) | Kiểm soát truy cập bắt buộc dựa trên nhãn bảo mật | Oracle Label Security (OLS), Oracle Database Vault (ODV) |
 | **RBAC** (Role-Based Access Control) | Kiểm soát theo vai trò | Tạo roles: ADMIN_ROLE, LIBRARIAN_ROLE, STAFF_ROLE, READER_ROLE |
 
-> ⚠️ **Lưu ý:** Đồ án **KHÔNG sử dụng DAC** (Discretionary Access Control - GRANT/REVOKE trực tiếp). Thay vào đó, việc kiểm soát truy cập được thực hiện thông qua:
+> 📌 **Các công nghệ bảo mật Oracle được sử dụng:**
+> - **DAC:** GRANT/REVOKE quyền hệ thống và quyền đối tượng, Profiles quản lý tài nguyên và mật khẩu
 > - **OLS (Oracle Label Security):** Kiểm soát bắt buộc theo mức độ nhạy cảm của dữ liệu
-> - **VPD (Virtual Private Database):** Kiểm soát ở mức dòng dữ liệu
-> - **ODV (Oracle Database Vault):** Bảo vệ dữ liệu khỏi người dùng đặc quyền
-> - **Audit:** Giám sát và ghi nhận mọi hoạt động
+> - **VPD (Virtual Private Database):** Kiểm soát ở mức dòng dữ liệu (Row-Level Security)
+> - **ODV (Oracle Database Vault):** Bảo vệ dữ liệu khỏi người dùng đặc quyền (SYS, DBA)
+> - **Audit (Unified Auditing):** Giám sát và ghi nhận mọi hoạt động
+
+---
+
+### 0. 🔑 DAC - Discretionary Access Control
+
+**Mục đích:** Cho phép chủ sở hữu dữ liệu quyết định ai được truy cập vào đối tượng của mình.
+
+**Áp dụng trong đồ án:**
+
+#### a) System Privileges (Quyền hệ thống):
+
+```sql
+GRANT CREATE SESSION TO librarian_user;
+GRANT CREATE TABLE, CREATE VIEW TO library;
+```
+
+#### b) Object Privileges (Quyền đối tượng):
+
+```sql
+GRANT SELECT, INSERT, UPDATE ON library.books TO librarian_role;
+GRANT SELECT ON library.books TO reader_role;
+```
+
+#### c) Roles:
+
+```sql
+CREATE ROLE librarian_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON library.books TO librarian_role;
+GRANT librarian_role TO librarian_user;
+```
+
+#### d) Profiles (Quản lý tài nguyên và mật khẩu):
+
+| Profile | Resource Limits | Password Policies |
+|---------|-----------------|-------------------|
+| `DEFAULT` | Mặc định Oracle | Mặc định Oracle |
+| `APP_USER_PROFILE` | SESSIONS_PER_USER 3, IDLE_TIME 30 | PASSWORD_LIFE_TIME 90, FAILED_LOGIN_ATTEMPTS 5 |
+| `ADMIN_PROFILE` | UNLIMITED | PASSWORD_LIFE_TIME 60, FAILED_LOGIN_ATTEMPTS 3 |
 
 ---
 
@@ -182,6 +222,48 @@ AUDIT SELECT, UPDATE ON library.user_info BY ACCESS;
 | `Time_Of_Day` | Kiểm tra thời gian truy cập (giờ hành chính) |
 
 **Tham khảo:** `docs/ODV.md`, `docs/dv-techreport.md`
+
+---
+
+### 5. 🔏 Data Redaction - Che giấu dữ liệu nhạy cảm
+
+**Mục đích:** Che giấu (masking) dữ liệu nhạy cảm khi hiển thị cho người dùng, trong khi dữ liệu gốc vẫn được lưu trữ đầy đủ trong database.
+
+**Các loại Redaction:**
+
+| Loại | Mô tả | Ví dụ |
+|------|-------|-------|
+| **Full Redaction** | Thay toàn bộ giá trị | `0913123456` → `0` |
+| **Partial Redaction** | Che một phần giá trị | `0913123456` → `091****456` |
+| **Random Redaction** | Thay bằng giá trị ngẫu nhiên | `0913123456` → `0827654321` |
+| **Regexp Redaction** | Che theo pattern regex | `abc@gmail.com` → `***@gmail.com` |
+| **Null Redaction** | Trả về NULL | `0913123456` → `NULL` |
+
+**Áp dụng trong đồ án:**
+
+| Cột | Bảng | Loại Redaction | Áp dụng cho |
+|-----|------|----------------|-------------|
+| `phone` | `USER_INFO` | Partial | STAFF, READER (chỉ ADMIN, LIBRARIAN thấy đầy đủ) |
+| `email` | `USER_INFO` | Regexp | READER (chỉ thấy domain) |
+| `address` | `USER_INFO` | Full | READER (không thấy) |
+
+**Ví dụ SQL:**
+
+```sql
+-- Tạo policy che số điện thoại
+BEGIN
+    DBMS_REDACT.ADD_POLICY(
+        object_schema    => 'LIBRARY',
+        object_name      => 'USER_INFO',
+        column_name      => 'PHONE',
+        policy_name      => 'REDACT_PHONE',
+        function_type    => DBMS_REDACT.PARTIAL,
+        function_parameters => '0,1,3,#,7,3',  -- Giữ 3 đầu, 3 cuối, che giữa bằng #
+        expression       => 'SYS_CONTEXT(''USERENV'',''SESSION_USER'') NOT IN (''ADMIN_USER'',''LIBRARIAN_USER'')'
+    );
+END;
+/
+```
 
 ---
 
