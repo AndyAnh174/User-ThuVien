@@ -90,9 +90,13 @@ async def login(request: LoginRequest):
                 }
             )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching user info: {str(e)}")
+        print(f"[ERROR] Login query failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error: {str(e)}"
+        )
     finally:
-        Database.release_connection(sys_conn)
+        sys_conn.close()
 
 
 @router.get("/me")
