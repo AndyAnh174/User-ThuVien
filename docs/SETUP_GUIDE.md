@@ -36,31 +36,68 @@ docker logs -f oracle23ai
 
 ## Bước 2: Setup Database Schema
 
-Chạy các scripts theo thứ tự:
+**⚠️ QUAN TRỌNG:** Phải chạy đúng thứ tự và restart database đúng chỗ!
+
+### Bước 2.1: Tạo Users và Tables
 
 ```bash
-# Kết nối vào container
-docker exec -it oracle23ai sqlplus sys/Oracle123@localhost:1521/FREEPDB1 as sysdba
+# Kết nối vào container với SYS
+docker exec -it oracle23ai sqlplus sys/Oracle123 as sysdba
+```
 
-# Chạy từng script (trong sqlplus)
+```sql
+-- Chuyển sang PDB
+ALTER SESSION SET CONTAINER = FREEPDB1;
+
+-- Chạy scripts cơ bản
 @/opt/oracle/scripts/setup/01_create_users.sql
 @/opt/oracle/scripts/setup/02_create_tables.sql
 @/opt/oracle/scripts/setup/03_setup_vpd.sql
 @/opt/oracle/scripts/setup/04_setup_audit.sql
-@/opt/oracle/scripts/setup/05_setup_ols.sql
-@/opt/oracle/scripts/setup/08_create_ols_trigger.sql
-@/opt/oracle/scripts/setup/10_setup_proxy_auth.sql
-@/opt/oracle/scripts/setup/15_enable_ols_system.sql
-@/opt/oracle/scripts/setup/16_enable_ols_pdb.sql
-@/opt/oracle/scripts/setup/17_fix_ols_permissions.sql
-
-# Thoát sqlplus
-exit
 ```
 
-**QUAN TRỌNG:** Sau khi chạy script 15 và 16, cần restart database:
+### Bước 2.2: Enable OLS (Oracle Label Security)
+
+```sql
+-- Chuyển về CDB Root để enable OLS
+ALTER SESSION SET CONTAINER = CDB$ROOT;
+@/opt/oracle/scripts/setup/15_enable_ols_system.sql
+
+-- Enable OLS trong PDB
+ALTER SESSION SET CONTAINER = FREEPDB1;
+@/opt/oracle/scripts/setup/16_enable_ols_pdb.sql
+
+-- Thoát để restart database
+EXIT;
+```
+
+### Bước 2.3: Restart Database (BẮT BUỘC!)
+
 ```bash
 docker restart oracle23ai
+# Chờ 1-2 phút cho database khởi động lại
+```
+
+### Bước 2.4: Tạo OLS Policy (SAU khi restart)
+
+```bash
+# Kết nối lại
+docker exec -it oracle23ai sqlplus sys/Oracle123 as sysdba
+```
+
+```sql
+-- Chuyển sang PDB
+ALTER SESSION SET CONTAINER = FREEPDB1;
+
+-- Tạo OLS Policy
+@/opt/oracle/scripts/setup/05_setup_ols.sql
+
+-- Setup các components còn lại
+@/opt/oracle/scripts/setup/08_create_ols_trigger.sql
+@/opt/oracle/scripts/setup/10_setup_proxy_auth.sql
+@/opt/oracle/scripts/setup/17_fix_ols_permissions.sql
+
+EXIT;
 ```
 
 ---
