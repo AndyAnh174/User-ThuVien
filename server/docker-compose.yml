@@ -2,12 +2,13 @@ version: '3.8'
 
 services:
   oracle-db:
-    image: container-registry.oracle.com/database/free:23.6.0.0
+    # Image chính thức - cần docker login container-registry.oracle.com trước
+    image: container-registry.oracle.com/database/free:latest
     container_name: oracle23ai
     hostname: oracle23ai
     ports:
       - "1521:1521"   # Oracle Listener
-      - "5500:5500"   # Enterprise Manager Express (EM Express)
+      - "5500:5500"   # Enterprise Manager Express
     environment:
       # Password cho SYS, SYSTEM và PDBADMIN
       ORACLE_PWD: "Oracle123"
@@ -18,7 +19,7 @@ services:
     volumes:
       # Persistent data
       - oracle_data:/opt/oracle/oradata
-      # Scripts khởi tạo (nếu có)
+      # Scripts khởi tạo (chạy tự động lần đầu)
       - ./scripts/startup:/opt/oracle/scripts/startup
       - ./scripts/setup:/opt/oracle/scripts/setup
     healthcheck:
@@ -28,7 +29,6 @@ services:
       retries: 10
       start_period: 300s
     restart: unless-stopped
-    # Giới hạn tài nguyên (tuỳ chỉnh theo máy)
     deploy:
       resources:
         limits:

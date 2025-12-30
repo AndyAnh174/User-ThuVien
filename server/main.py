@@ -1,14 +1,16 @@
-# main.py
-from fastapi import FastAPI
+"""
+Library User Management System
+Entry point for running the application
+"""
 
-# Create an instance of the FastAPI class
-app = FastAPI(
-    title="My First FastAPI App",
-    version="1.0.0",
-    description="A simple 'Hello, World!' API"
-)
+import uvicorn
+from app.config import settings
 
-# Define a path operation for a GET request to the root URL ("/")
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
+if __name__ == "__main__":
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=settings.DEBUG,
+        log_level="info"
+    )

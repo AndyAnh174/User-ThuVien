@@ -1,97 +1,117 @@
 -- ============================================
--- Script khởi tạo users cho hệ thống Thư viện
--- Chạy tự động khi Oracle container khởi động lần đầu
+-- SCRIPT 01: TẠO TABLESPACES VÀ USERS
+-- Chạy với SYS AS SYSDBA
 -- ============================================
 
 -- Kết nối vào PDB
-ALTER SESSION SET CONTAINER = THUVIEN_PDB;
+ALTER SESSION SET CONTAINER = FREEPDB1;
 
--- Tạo tablespace cho ứng dụng
-CREATE TABLESPACE thuvien_data
-    DATAFILE '/opt/oracle/oradata/FREE/THUVIEN_PDB/thuvien_data01.dbf'
+-- ============================================
+-- 1. TẠO TABLESPACES (Oracle tự chọn đường dẫn)
+-- ============================================
+
+CREATE TABLESPACE library_data
+    DATAFILE 'library_data01.dbf'
     SIZE 100M
-    AUTOEXTEND ON
-    NEXT 50M
-    MAXSIZE UNLIMITED;
+    AUTOEXTEND ON NEXT 50M MAXSIZE UNLIMITED;
 
-CREATE TEMPORARY TABLESPACE thuvien_temp
-    TEMPFILE '/opt/oracle/oradata/FREE/THUVIEN_PDB/thuvien_temp01.dbf'
+CREATE TEMPORARY TABLESPACE library_temp
+    TEMPFILE 'library_temp01.dbf'
     SIZE 50M
-    AUTOEXTEND ON
-    NEXT 25M
-    MAXSIZE UNLIMITED;
+    AUTOEXTEND ON NEXT 25M MAXSIZE UNLIMITED;
 
 -- ============================================
--- Tạo Admin user (quản lý bảo mật)
+-- 2. TẠO 3 USERS QUẢN TRỊ BẢO MẬT
 -- ============================================
-CREATE USER sec_admin IDENTIFIED BY SecAdmin123
-    DEFAULT TABLESPACE thuvien_data
-    TEMPORARY TABLESPACE thuvien_temp
-    QUOTA UNLIMITED ON thuvien_data;
 
-GRANT CONNECT, RESOURCE TO sec_admin;
-GRANT CREATE SESSION TO sec_admin;
-GRANT CREATE USER TO sec_admin;
-GRANT ALTER USER TO sec_admin;
-GRANT DROP USER TO sec_admin;
-GRANT CREATE ROLE TO sec_admin;
-GRANT DROP ANY ROLE TO sec_admin;
-GRANT GRANT ANY ROLE TO sec_admin;
-GRANT CREATE PROFILE TO sec_admin;
-GRANT ALTER PROFILE TO sec_admin;
-GRANT DROP PROFILE TO sec_admin;
-GRANT SELECT ANY DICTIONARY TO sec_admin;
+CREATE USER lib_project IDENTIFIED BY "LibProject123"
+    DEFAULT TABLESPACE library_data
+    TEMPORARY TABLESPACE library_temp
+    QUOTA UNLIMITED ON library_data;
 
--- ============================================
--- Tạo App user (cho ứng dụng web kết nối)
--- ============================================
-CREATE USER app_user IDENTIFIED BY AppUser123
-    DEFAULT TABLESPACE thuvien_data
-    TEMPORARY TABLESPACE thuvien_temp
-    QUOTA UNLIMITED ON thuvien_data;
+GRANT CONNECT, RESOURCE TO lib_project;
+GRANT CREATE SESSION TO lib_project;
+GRANT CREATE PROCEDURE TO lib_project;
+GRANT EXECUTE ON DBMS_RLS TO lib_project;
+GRANT EXECUTE ON DBMS_FGA TO lib_project;
+GRANT SELECT ANY DICTIONARY TO lib_project;
 
-GRANT CONNECT, RESOURCE TO app_user;
-GRANT CREATE SESSION TO app_user;
-GRANT CREATE TABLE TO app_user;
-GRANT CREATE VIEW TO app_user;
-GRANT CREATE PROCEDURE TO app_user;
-GRANT CREATE SEQUENCE TO app_user;
+CREATE USER lib_admin IDENTIFIED BY "LibAdmin123"
+    DEFAULT TABLESPACE library_data
+    TEMPORARY TABLESPACE library_temp
+    QUOTA UNLIMITED ON library_data;
+
+GRANT CONNECT, RESOURCE TO lib_admin;
+GRANT CREATE SESSION TO lib_admin;
+GRANT SELECT ANY DICTIONARY TO lib_admin;
+
+CREATE USER system_orcl_free IDENTIFIED BY "SysOrcl123"
+    DEFAULT TABLESPACE library_data
+    TEMPORARY TABLESPACE library_temp
+    QUOTA UNLIMITED ON library_data;
+
+GRANT CONNECT, RESOURCE TO system_orcl_free;
+GRANT CREATE SESSION TO system_orcl_free;
+GRANT SELECT ANY DICTIONARY TO system_orcl_free;
 
 -- ============================================
--- Tạo bảng thông tin cá nhân mẫu
+-- 3. TẠO SCHEMA LIBRARY
 -- ============================================
--- Chuyển sang schema app_user để tạo bảng
-ALTER SESSION SET CURRENT_SCHEMA = app_user;
 
-CREATE TABLE user_info (
-    user_id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    username VARCHAR2(50) NOT NULL UNIQUE,
-    full_name VARCHAR2(100),
-    email VARCHAR2(100),
-    phone VARCHAR2(20),
-    address VARCHAR2(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+CREATE USER library IDENTIFIED BY "Library123"
+    DEFAULT TABLESPACE library_data
+    TEMPORARY TABLESPACE library_temp
+    QUOTA UNLIMITED ON library_data;
 
--- Thêm dữ liệu mẫu
-INSERT INTO user_info (username, full_name, email, phone, address)
-VALUES ('admin', 'Administrator', 'admin@thuvien.vn', '0901234567', 'Hà Nội, Việt Nam');
+GRANT CONNECT, RESOURCE TO library;
+GRANT CREATE SESSION TO library;
+GRANT CREATE TABLE TO library;
+GRANT CREATE VIEW TO library;
+GRANT CREATE PROCEDURE TO library;
+GRANT CREATE SEQUENCE TO library;
+GRANT CREATE TRIGGER TO library;
 
-INSERT INTO user_info (username, full_name, email, phone, address)
-VALUES ('librarian', 'Thủ thư', 'librarian@thuvien.vn', '0907654321', 'TP.HCM, Việt Nam');
+-- ============================================
+-- 4. TẠO CÁC ROLES (RBAC)
+-- ============================================
+
+CREATE ROLE admin_role;
+CREATE ROLE librarian_role;
+CREATE ROLE staff_role;
+CREATE ROLE reader_role;
+
+-- ============================================
+-- 5. TẠO CÁC USERS ỨNG DỤNG
+-- ============================================
+
+CREATE USER admin_user IDENTIFIED BY "Admin123"
+    DEFAULT TABLESPACE library_data
+    TEMPORARY TABLESPACE library_temp
+    QUOTA 50M ON library_data;
+GRANT CREATE SESSION TO admin_user;
+GRANT admin_role TO admin_user;
+
+CREATE USER librarian_user IDENTIFIED BY "Librarian123"
+    DEFAULT TABLESPACE library_data
+    TEMPORARY TABLESPACE library_temp
+    QUOTA 20M ON library_data;
+GRANT CREATE SESSION TO librarian_user;
+GRANT librarian_role TO librarian_user;
+
+CREATE USER staff_user IDENTIFIED BY "Staff123"
+    DEFAULT TABLESPACE library_data
+    TEMPORARY TABLESPACE library_temp
+    QUOTA 10M ON library_data;
+GRANT CREATE SESSION TO staff_user;
+GRANT staff_role TO staff_user;
+
+CREATE USER reader_user IDENTIFIED BY "Reader123"
+    DEFAULT TABLESPACE library_data
+    TEMPORARY TABLESPACE library_temp
+    QUOTA 5M ON library_data;
+GRANT CREATE SESSION TO reader_user;
+GRANT reader_role TO reader_user;
 
 COMMIT;
 
--- Cấp quyền cho sec_admin xem bảng user_info
-GRANT SELECT, INSERT, UPDATE, DELETE ON app_user.user_info TO sec_admin;
-
--- Log completion
-BEGIN
-    DBMS_OUTPUT.PUT_LINE('============================================');
-    DBMS_OUTPUT.PUT_LINE('Database initialization completed!');
-    DBMS_OUTPUT.PUT_LINE('Users created: sec_admin, app_user');
-    DBMS_OUTPUT.PUT_LINE('Tablespaces: thuvien_data, thuvien_temp');
-    DBMS_OUTPUT.PUT_LINE('============================================');
-END;
-/
+SELECT 'Script 01 completed!' FROM DUAL;
