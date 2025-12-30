@@ -1,166 +1,146 @@
 -- ============================================
--- SCRIPT 04: THIẾT LẬP STANDARD AUDITING
+-- SCRIPT 04: UNIFIED AUDITING (Oracle 23ai)
 -- Chạy với SYS AS SYSDBA
 -- ============================================
+-- Oracle 23ai chỉ hỗ trợ Unified Auditing
+-- Traditional AUDIT đã bị deprecated
+-- ============================================
 
--- Kết nối: CONN sys/Oracle123@THUVIEN_PDB AS SYSDBA
-
+-- Chuyển sang PDB
 ALTER SESSION SET CONTAINER = FREEPDB1;
 
--- ============================================
--- 1. BẬT AUDITING (nếu chưa bật)
--- ============================================
--- Kiểm tra trạng thái audit
--- SHOW PARAMETER audit_trail;
-
--- Nếu audit_trail = NONE, cần chạy (cần restart DB):
--- ALTER SYSTEM SET audit_trail = DB SCOPE = SPFILE;
+SET SERVEROUTPUT ON;
 
 -- ============================================
--- 2. AUDIT SESSION (Đăng nhập/Đăng xuất)
+-- 1. TẠO AUDIT POLICY CHO LOGIN/LOGOUT
 -- ============================================
+PROMPT Creating login audit policy...
 
--- Giám sát tất cả các lần đăng nhập
-AUDIT CREATE SESSION BY ACCESS;
+CREATE AUDIT POLICY library_login_policy
+    ACTIONS LOGON, LOGOFF;
 
--- Giám sát đăng nhập thất bại
-AUDIT CREATE SESSION WHENEVER NOT SUCCESSFUL;
-
--- ============================================
--- 3. AUDIT QUẢN LÝ USER
--- ============================================
-
--- Giám sát tạo/sửa/xóa user
-AUDIT CREATE USER BY ACCESS;
-AUDIT ALTER USER BY ACCESS;
-AUDIT DROP USER BY ACCESS;
-
--- Giám sát quản lý role
-AUDIT CREATE ROLE BY ACCESS;
-AUDIT ALTER ANY ROLE BY ACCESS;
-AUDIT DROP ANY ROLE BY ACCESS;
-AUDIT GRANT ANY ROLE BY ACCESS;
-
--- Giám sát quản lý profile
-AUDIT CREATE PROFILE BY ACCESS;
-AUDIT ALTER PROFILE BY ACCESS;
-AUDIT DROP PROFILE BY ACCESS;
+AUDIT POLICY library_login_policy;
 
 -- ============================================
--- 4. AUDIT TRÊN CÁC BẢNG NHẠY CẢM
+-- 2. TẠO AUDIT POLICY CHO USER MANAGEMENT
 -- ============================================
+PROMPT Creating user management audit policy...
 
--- Giám sát bảng USER_INFO
-AUDIT SELECT ON library.user_info BY ACCESS;
-AUDIT INSERT ON library.user_info BY ACCESS;
-AUDIT UPDATE ON library.user_info BY ACCESS;
-AUDIT DELETE ON library.user_info BY ACCESS;
+CREATE AUDIT POLICY library_user_mgmt_policy
+    PRIVILEGES CREATE USER, ALTER USER, DROP USER,
+               CREATE ROLE, ALTER ANY ROLE, DROP ANY ROLE,
+               GRANT ANY ROLE, GRANT ANY PRIVILEGE;
 
--- Giám sát bảng BOOKS
-AUDIT SELECT ON library.books BY ACCESS;
-AUDIT INSERT ON library.books BY ACCESS;
-AUDIT UPDATE ON library.books BY ACCESS;
-AUDIT DELETE ON library.books BY ACCESS;
-
--- Giám sát bảng BORROW_HISTORY
-AUDIT INSERT ON library.borrow_history BY ACCESS;
-AUDIT UPDATE ON library.borrow_history BY ACCESS;
-AUDIT DELETE ON library.borrow_history BY ACCESS;
+AUDIT POLICY library_user_mgmt_policy;
 
 -- ============================================
--- 5. AUDIT QUYỀN HỆ THỐNG QUAN TRỌNG
+-- 3. TẠO AUDIT POLICY CHO DỮ LIỆU NHẠY CẢM
 -- ============================================
+PROMPT Creating sensitive data audit policy...
 
--- Giám sát sử dụng quyền nguy hiểm
-AUDIT SELECT ANY TABLE BY ACCESS;
-AUDIT DELETE ANY TABLE BY ACCESS;
-AUDIT DROP ANY TABLE BY ACCESS;
-AUDIT ALTER ANY TABLE BY ACCESS;
+CREATE AUDIT POLICY library_sensitive_data_policy
+    ACTIONS SELECT ON LIBRARY.BOOKS,
+            INSERT ON LIBRARY.BOOKS,
+            UPDATE ON LIBRARY.BOOKS,
+            DELETE ON LIBRARY.BOOKS,
+            SELECT ON LIBRARY.USER_INFO,
+            UPDATE ON LIBRARY.USER_INFO,
+            DELETE ON LIBRARY.USER_INFO,
+            SELECT ON LIBRARY.BORROW_HISTORY,
+            INSERT ON LIBRARY.BORROW_HISTORY,
+            UPDATE ON LIBRARY.BORROW_HISTORY,
+            DELETE ON LIBRARY.BORROW_HISTORY;
 
--- Giám sát GRANT/REVOKE
-AUDIT GRANT ANY PRIVILEGE BY ACCESS;
-AUDIT GRANT ANY OBJECT PRIVILEGE BY ACCESS;
+AUDIT POLICY library_sensitive_data_policy;
 
 -- ============================================
--- 6. AUDIT EXEMPT ACCESS POLICY (VPD bypass)
+-- 4. TẠO AUDIT POLICY CHO DDL
 -- ============================================
-AUDIT EXEMPT ACCESS POLICY BY ACCESS;
+PROMPT Creating DDL audit policy...
+
+CREATE AUDIT POLICY library_ddl_policy
+    ACTIONS CREATE TABLE, ALTER TABLE, DROP TABLE,
+            TRUNCATE TABLE, CREATE VIEW, DROP VIEW;
+
+AUDIT POLICY library_ddl_policy;
 
 -- ============================================
--- 7. TẠO VIEW ĐỂ XEM AUDIT TRAIL DỄ DÀNG
+-- 5. TẠO AUDIT POLICY CHO PRIVILEGE ABUSE
 -- ============================================
+PROMPT Creating privilege abuse audit policy...
 
+CREATE AUDIT POLICY library_priv_abuse_policy
+    PRIVILEGES SELECT ANY TABLE, DELETE ANY TABLE, 
+               DROP ANY TABLE, ALTER ANY TABLE,
+               EXEMPT ACCESS POLICY;
+
+AUDIT POLICY library_priv_abuse_policy;
+
+-- ============================================
+-- 6. TẠO VIEW ĐỂ XEM AUDIT TRAIL (Unified)
+-- ============================================
+PROMPT Creating audit views...
+
+-- View tổng hợp audit
 CREATE OR REPLACE VIEW library.v_audit_trail AS
 SELECT 
-    username AS "User",
-    action_name AS "Action",
-    obj_name AS "Object",
-    TO_CHAR(timestamp, 'DD/MM/YYYY HH24:MI:SS') AS "Time",
-    CASE returncode
-        WHEN 0 THEN 'SUCCESS'
-        ELSE 'FAILED (' || returncode || ')'
-    END AS "Result",
-    priv_used AS "Privilege Used",
-    terminal AS "Terminal",
-    os_username AS "OS User"
-FROM dba_audit_trail
-ORDER BY timestamp DESC;
+    event_timestamp,
+    dbusername AS username,
+    action_name,
+    object_schema,
+    object_name,
+    sql_text,
+    return_code,
+    unified_audit_policies
+FROM unified_audit_trail
+WHERE object_schema = 'LIBRARY' 
+   OR dbusername IN ('ADMIN_USER', 'LIBRARIAN_USER', 'STAFF_USER', 'READER_USER', 'LIBRARY')
+ORDER BY event_timestamp DESC;
 
 GRANT SELECT ON library.v_audit_trail TO admin_role;
 
--- ============================================
--- 8. TẠO VIEW XEM AUDIT THEO USER CỤ THỂ
--- ============================================
-
+-- View audit theo user
 CREATE OR REPLACE VIEW library.v_audit_by_user AS
 SELECT 
-    username,
+    dbusername AS username,
     action_name,
     COUNT(*) AS action_count,
-    MAX(timestamp) AS last_action
-FROM dba_audit_trail
-GROUP BY username, action_name
-ORDER BY username, action_count DESC;
+    MAX(event_timestamp) AS last_action
+FROM unified_audit_trail
+WHERE object_schema = 'LIBRARY'
+GROUP BY dbusername, action_name
+ORDER BY dbusername, action_count DESC;
 
 GRANT SELECT ON library.v_audit_by_user TO admin_role;
 
--- ============================================
--- 9. TẠO VIEW XEM ĐĂNG NHẬP THẤT BẠI
--- ============================================
-
+-- View login failures
 CREATE OR REPLACE VIEW library.v_failed_logins AS
 SELECT 
-    username,
-    terminal,
+    event_timestamp,
+    dbusername AS username,
     os_username,
-    TO_CHAR(timestamp, 'DD/MM/YYYY HH24:MI:SS') AS "Time",
-    returncode AS error_code
-FROM dba_audit_trail
+    userhost AS client_host,
+    return_code,
+    unified_audit_policies
+FROM unified_audit_trail
 WHERE action_name = 'LOGON'
-AND returncode != 0
-ORDER BY timestamp DESC;
+  AND return_code != 0
+ORDER BY event_timestamp DESC;
 
 GRANT SELECT ON library.v_failed_logins TO admin_role;
 
 -- ============================================
--- LOG COMPLETION
+-- 7. KIỂM TRA AUDIT POLICIES ĐÃ TẠO
 -- ============================================
-BEGIN
-    DBMS_OUTPUT.PUT_LINE('============================================');
-    DBMS_OUTPUT.PUT_LINE('Script 04 completed successfully!');
-    DBMS_OUTPUT.PUT_LINE('Enabled auditing for:');
-    DBMS_OUTPUT.PUT_LINE('  - Sessions (login/logout)');
-    DBMS_OUTPUT.PUT_LINE('  - User management (CREATE/ALTER/DROP USER)');
-    DBMS_OUTPUT.PUT_LINE('  - Role management');
-    DBMS_OUTPUT.PUT_LINE('  - Profile management');
-    DBMS_OUTPUT.PUT_LINE('  - Tables: user_info, books, borrow_history');
-    DBMS_OUTPUT.PUT_LINE('  - Dangerous privileges');
-    DBMS_OUTPUT.PUT_LINE('Created views:');
-    DBMS_OUTPUT.PUT_LINE('  - v_audit_trail');
-    DBMS_OUTPUT.PUT_LINE('  - v_audit_by_user');
-    DBMS_OUTPUT.PUT_LINE('  - v_failed_logins');
-    DBMS_OUTPUT.PUT_LINE('============================================');
-END;
-/
+PROMPT Checking audit policies...
+
+SELECT policy_name, enabled_option 
+FROM audit_unified_enabled_policies 
+WHERE policy_name LIKE 'LIBRARY%';
 
 COMMIT;
+
+PROMPT ============================================
+PROMPT Unified Auditing setup completed!
+PROMPT View audit data: SELECT * FROM unified_audit_trail;
+PROMPT ============================================

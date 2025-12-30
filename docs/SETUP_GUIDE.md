@@ -100,6 +100,40 @@ ALTER SESSION SET CONTAINER = FREEPDB1;
 EXIT;
 ```
 
+### Bước 2.5: Setup Database Vault (Tùy chọn)
+
+**Lưu ý:** Database Vault có thể không khả dụng trong Oracle 23ai Free Edition.
+
+```bash
+# Kết nối lại
+docker exec -it oracle23ai sqlplus sys/Oracle123 as sysdba
+```
+
+```sql
+-- Enable Database Vault
+@/opt/oracle/scripts/setup/18_setup_database_vault.sql
+
+EXIT;
+```
+
+```bash
+# Restart database sau khi enable DV
+docker restart oracle23ai
+# Chờ 1-2 phút
+```
+
+```bash
+# Kết nối lại và tạo Realms
+docker exec -it oracle23ai sqlplus sys/Oracle123 as sysdba
+```
+
+```sql
+ALTER SESSION SET CONTAINER = FREEPDB1;
+@/opt/oracle/scripts/setup/19_setup_dv_realms.sql
+
+EXIT;
+```
+
 ---
 
 ## Bước 3: Cài đặt Backend
