@@ -295,24 +295,69 @@ GRANT SELECT ON dba_users TO library;
 
 ---
 
-## IX. DATABASE VAULT (TÙY CHỌN)
+## IX. DATABASE VAULT (ODV) - BẢO VỆ KHỎI DBA
 
-**Lưu ý:** Database Vault có thể không khả dụng trong Oracle 23ai Free.
+> ⚠️ **Yêu cầu:** Oracle Enterprise Edition với Database Vault license.
+
+Database Vault ngăn chặn DBA (SYS, SYSTEM) truy cập dữ liệu ứng dụng.
+
+### Bước 9.1: Enable Database Vault
+
+```bash
+docker exec -it oracle23ai sqlplus sys/Oracle123 as sysdba
+```
 
 ```sql
--- Enable Database Vault
+-- Ở CDB ROOT (không cần chuyển container)
 @/opt/oracle/scripts/setup/18_setup_database_vault.sql
 EXIT;
 ```
 
+### Bước 9.2: RESTART DATABASE (BẮT BUỘC!)
+
 ```bash
 docker restart oracle23ai
+# Chờ 2-3 phút cho database khởi động lại
+docker logs oracle23ai --tail 30
+```
+
+### Bước 9.3: Tạo Realm bảo vệ Schema LIBRARY
+
+```bash
+docker exec -it oracle23ai sqlplus dv_owner/DVOwner#123@localhost:1521/FREEPDB1
+```
+
+```sql
+@/opt/oracle/scripts/setup/19_setup_dv_realms.sql
+EXIT;
+```
+
+### Bước 9.4: Kiểm tra ODV hoạt động
+
+```bash
+# Test: SYS không thể truy cập LIBRARY.BOOKS
+docker exec -it oracle23ai sqlplus sys/Oracle123 as sysdba
 ```
 
 ```sql
 ALTER SESSION SET CONTAINER = FREEPDB1;
-@/opt/oracle/scripts/setup/19_setup_dv_realms.sql
+SELECT * FROM library.books;
+-- Kết quả mong đợi: ORA-01031: insufficient privileges (BỊ CHẶN!)
 ```
+
+```sql
+-- Test: Application user vẫn truy cập được
+CONNECT admin_user/Admin123@localhost:1521/FREEPDB1
+SELECT COUNT(*) FROM library.books;
+-- Kết quả: Trả về số lượng sách (OK)
+```
+
+### ODV Users
+
+| User | Password | Chức năng |
+|------|----------|-----------|
+| `dv_owner` | `DVOwner#123` | Quản lý Realms, Command Rules |
+| `dv_acctmgr` | `DVAcctMgr#123` | Quản lý tài khoản user |
 
 ---
 
