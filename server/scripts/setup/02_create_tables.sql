@@ -1,9 +1,13 @@
 -- ============================================
 -- SCRIPT 02: TẠO BẢNG DỮ LIỆU
--- Chạy với user LIBRARY
+-- Có thể chạy với SYS hoặc LIBRARY
 -- ============================================
 
--- Kết nối: CONN library/Library#123@THUVIEN_PDB
+-- Chuyển sang PDB (nếu chạy với SYS)
+ALTER SESSION SET CONTAINER = FREEPDB1;
+
+-- Tạo bảng dưới schema LIBRARY
+ALTER SESSION SET CURRENT_SCHEMA = LIBRARY;
 
 -- ============================================
 -- 1. CLEANUP (XÓA BẢNG CŨ)
