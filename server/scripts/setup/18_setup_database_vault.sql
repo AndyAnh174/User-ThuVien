@@ -24,16 +24,38 @@ SELECT * FROM DBA_DV_STATUS;
 PROMPT Creating Database Vault users...
 
 -- DV Owner - quản lý realms và rules
-CREATE USER dv_owner IDENTIFIED BY "DVOwner#123"
-    DEFAULT TABLESPACE library_data
-    TEMPORARY TABLESPACE library_temp
-    QUOTA 50M ON library_data;
+BEGIN
+    EXECUTE IMMEDIATE 'CREATE USER dv_owner IDENTIFIED BY "DVOwner#123" 
+        DEFAULT TABLESPACE library_data 
+        TEMPORARY TABLESPACE library_temp 
+        QUOTA 50M ON library_data';
+    DBMS_OUTPUT.PUT_LINE('User dv_owner created.');
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE = -1920 THEN
+            DBMS_OUTPUT.PUT_LINE('User dv_owner already exists. Skipping...');
+        ELSE
+            RAISE;
+        END IF;
+END;
+/
 
 -- DV Account Manager - quản lý users
-CREATE USER dv_acctmgr IDENTIFIED BY "DVAcctMgr#123"
-    DEFAULT TABLESPACE library_data
-    TEMPORARY TABLESPACE library_temp
-    QUOTA 10M ON library_data;
+BEGIN
+    EXECUTE IMMEDIATE 'CREATE USER dv_acctmgr IDENTIFIED BY "DVAcctMgr#123" 
+        DEFAULT TABLESPACE library_data 
+        TEMPORARY TABLESPACE library_temp 
+        QUOTA 10M ON library_data';
+    DBMS_OUTPUT.PUT_LINE('User dv_acctmgr created.');
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE = -1920 THEN
+            DBMS_OUTPUT.PUT_LINE('User dv_acctmgr already exists. Skipping...');
+        ELSE
+            RAISE;
+        END IF;
+END;
+/
 
 GRANT CREATE SESSION TO dv_owner;
 GRANT CREATE SESSION TO dv_acctmgr;
