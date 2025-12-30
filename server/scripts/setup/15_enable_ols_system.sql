@@ -18,7 +18,7 @@ EXCEPTION WHEN OTHERS THEN
 END;
 /
 
--- Unlock LBACSYS just in case
-ALTER USER lbacsys IDENTIFIED BY "Lbacsys#123" ACCOUNT UNLOCK;
+-- Note: LBACSYS is dictionary-protected in Oracle 23ai, cannot be unlocked/modified
+-- ALTER USER lbacsys IDENTIFIED BY "Lbacsys#123" ACCOUNT UNLOCK;
 
-PROMPT Please RESTART the database instace now.
+PROMPT OLS Enable completed. Please RESTART the database instance now.

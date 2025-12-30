@@ -45,7 +45,8 @@ docker exec -it oracle23ai sqlplus sys/Oracle123@localhost:1521/FREEPDB1 as sysd
 # Chạy từng script (trong sqlplus)
 @/opt/oracle/scripts/setup/01_create_users.sql
 @/opt/oracle/scripts/setup/02_create_tables.sql
-@/opt/oracle/scripts/setup/03_sample_data.sql
+@/opt/oracle/scripts/setup/03_setup_vpd.sql
+@/opt/oracle/scripts/setup/04_setup_audit.sql
 @/opt/oracle/scripts/setup/05_setup_ols.sql
 @/opt/oracle/scripts/setup/08_create_ols_trigger.sql
 @/opt/oracle/scripts/setup/10_setup_proxy_auth.sql
