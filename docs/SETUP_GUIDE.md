@@ -1,283 +1,319 @@
-# Hướng dẫn Cài đặt và Chạy Hệ thống Thư viện
+# HƯỚNG DẪN CÀI ĐẶT - THƯ VIỆN SỐ
 
-## Yêu cầu hệ thống
+## I. YÊU CẦU HỆ THỐNG
 
-### Docker
-- Docker Desktop (Windows/Mac) hoặc Docker Engine (Linux)
-- Tối thiểu 4GB RAM cho Oracle Database
-
-### Backend (Python)
-- Python 3.10+
-- pip
-
-### Frontend (Next.js)
-- Node.js 18+
-- npm hoặc yarn
+| Thành phần | Yêu cầu |
+|------------|---------|
+| Docker | Phiên bản 20.x trở lên |
+| Node.js | Phiên bản 18.x trở lên |
+| Python | Phiên bản 3.11 trở lên |
+| RAM | Tối thiểu 4GB (khuyến nghị 8GB) |
 
 ---
 
-## Bước 1: Khởi động Oracle Database
+## II. CÀI ĐẶT ORACLE DATABASE
+
+### Bước 1: Khởi động Docker Container
 
 ```bash
-# Pull và chạy Oracle 23ai Free
-docker run -d \
-  --name oracle23ai \
-  -p 1521:1521 \
-  -e ORACLE_PWD=Oracle123 \
-  -v ./server/scripts/setup:/opt/oracle/scripts/setup \
-  container-registry.oracle.com/database/free:latest
-
-# Chờ database khởi động (khoảng 2-5 phút)
-docker logs -f oracle23ai
-# Khi thấy "DATABASE IS READY TO USE!" thì tiếp tục
+cd server
+docker compose up -d
+# Đợi 3-5 phút cho database khởi động
+docker logs oracle23ai --tail 50
 ```
 
----
+Chờ đến khi thấy: `DATABASE IS READY TO USE!`
 
-## Bước 2: Setup Database Schema
-
-**⚠️ QUAN TRỌNG:** Phải chạy đúng thứ tự và restart database đúng chỗ!
-
-### Bước 2.1: Tạo Users và Tables
+### Bước 2: Kết nối Database
 
 ```bash
-# Kết nối vào container với SYS
 docker exec -it oracle23ai sqlplus sys/Oracle123 as sysdba
 ```
 
-```sql
--- Chuyển sang PDB
-ALTER SESSION SET CONTAINER = FREEPDB1;
+---
 
--- Chạy scripts cơ bản
-@/opt/oracle/scripts/setup/01_create_users.sql
-@/opt/oracle/scripts/setup/02_create_tables.sql
-@/opt/oracle/scripts/setup/03_setup_vpd.sql
-@/opt/oracle/scripts/setup/04_setup_audit.sql
-```
+## III. CHẠY CÁC SCRIPTS THEO THỨ TỰ
 
-### Bước 2.2: Enable OLS (Oracle Label Security)
+**QUAN TRỌNG:** Phải chạy đúng thứ tự, chuyển đúng container và restart database đúng lúc!
+
+### Bước 3.1: Enable OLS System (Chạy ở CDB ROOT)
 
 ```sql
--- Chuyển về CDB Root để enable OLS
-ALTER SESSION SET CONTAINER = CDB$ROOT;
+-- Đang ở CDB ROOT, KHÔNG chuyển container!
 @/opt/oracle/scripts/setup/15_enable_ols_system.sql
-
--- Enable OLS trong PDB
-ALTER SESSION SET CONTAINER = FREEPDB1;
 @/opt/oracle/scripts/setup/16_enable_ols_pdb.sql
 
--- Thoát để restart database
 EXIT;
 ```
 
-### Bước 2.3: Restart Database (BẮT BUỘC!)
+### Bước 3.2: RESTART DATABASE (BẮT BUỘC!)
 
 ```bash
 docker restart oracle23ai
-# Chờ 1-2 phút cho database khởi động lại
+# Chờ 2-3 phút
+docker logs oracle23ai --tail 20
 ```
 
-### Bước 2.4: Tạo OLS Policy (SAU khi restart)
+### Bước 3.3: Kết nối lại và tạo Schema
 
 ```bash
-# Kết nối lại
 docker exec -it oracle23ai sqlplus sys/Oracle123 as sysdba
 ```
 
 ```sql
 -- Chuyển sang PDB
 ALTER SESSION SET CONTAINER = FREEPDB1;
+
+-- Tạo users và roles
+@/opt/oracle/scripts/setup/01_create_users.sql
+
+-- Tạo tables và sample data
+@/opt/oracle/scripts/setup/02_create_tables.sql
+
+-- Grant object privileges (sau khi tables đã tạo)
+@/opt/oracle/scripts/setup/01_1_grant_object_privs.sql
+
+-- Setup Unified Auditing
+@/opt/oracle/scripts/setup/04_setup_audit.sql
 
 -- Tạo OLS Policy
 @/opt/oracle/scripts/setup/05_setup_ols.sql
 
--- Setup các components còn lại
+-- Tạo OLS Trigger
 @/opt/oracle/scripts/setup/08_create_ols_trigger.sql
+
+-- Setup Proxy Authentication
 @/opt/oracle/scripts/setup/10_setup_proxy_auth.sql
+
+-- Fix OLS Permissions
 @/opt/oracle/scripts/setup/17_fix_ols_permissions.sql
 
 EXIT;
 ```
 
-### Bước 2.5: Setup Database Vault (Tùy chọn)
-
-**Lưu ý:** Database Vault có thể không khả dụng trong Oracle 23ai Free Edition.
+### Bước 3.4: Cập nhật OLS Labels cho sách
 
 ```bash
-# Kết nối lại
-docker exec -it oracle23ai sqlplus sys/Oracle123 as sysdba
-```
-
-```sql
--- Enable Database Vault
-@/opt/oracle/scripts/setup/18_setup_database_vault.sql
-
-EXIT;
-```
-
-```bash
-# Restart database sau khi enable DV
-docker restart oracle23ai
-# Chờ 1-2 phút
-```
-
-```bash
-# Kết nối lại và tạo Realms
 docker exec -it oracle23ai sqlplus sys/Oracle123 as sysdba
 ```
 
 ```sql
 ALTER SESSION SET CONTAINER = FREEPDB1;
-@/opt/oracle/scripts/setup/19_setup_dv_realms.sql
 
+-- Cập nhật labels cho tất cả sách
+UPDATE library.books 
+SET ols_label = CHAR_TO_LABEL('LIBRARY_POLICY', 'PUB')
+WHERE sensitivity_level = 'PUBLIC';
+
+UPDATE library.books 
+SET ols_label = CHAR_TO_LABEL('LIBRARY_POLICY', 'INT:LIB')
+WHERE sensitivity_level = 'INTERNAL';
+
+UPDATE library.books 
+SET ols_label = CHAR_TO_LABEL('LIBRARY_POLICY', 'CONF:LIB')
+WHERE sensitivity_level = 'CONFIDENTIAL';
+
+UPDATE library.books 
+SET ols_label = CHAR_TO_LABEL('LIBRARY_POLICY', 'TS:LIB,HR,FIN:HQ')
+WHERE sensitivity_level = 'TOP_SECRET';
+
+COMMIT;
+
+-- Kiểm tra
+SELECT book_id, title, sensitivity_level, ols_label FROM library.books;
+
+EXIT;
+```
+
+### Bước 3.5: Grant quyền cho Audit (QUAN TRỌNG)
+
+```bash
+docker exec -it oracle23ai sqlplus sys/Oracle123 as sysdba
+```
+
+```sql
+ALTER SESSION SET CONTAINER = FREEPDB1;
+
+-- Grant quyền xem audit trail
+GRANT SELECT ON audsys.unified_audit_trail TO library;
+
+-- Grant quyền xem profiles
+GRANT SELECT ON dba_profiles TO library;
+GRANT SELECT ON dba_users TO library;
+
+COMMIT;
 EXIT;
 ```
 
 ---
 
-## Bước 3: Cài đặt Backend
+## IV. CÀI ĐẶT BACKEND
+
+### Bước 4.1: Tạo file .env
 
 ```bash
 cd server
+cp .env.example .env
+```
 
-# Tạo virtual environment
-python -m venv venv
+Kiểm tra file `.env` có nội dung:
 
-# Activate (Windows)
-.\venv\Scripts\activate
+```env
+DB_USER=library
+DB_PASSWORD=Library123
+DB_HOST=localhost
+DB_PORT=1521
+DB_SERVICE=FREEPDB1
 
-# Activate (Linux/Mac)
-source venv/bin/activate
+APP_NAME=Library User Management API
+APP_VERSION=1.0.0
+DEBUG=true
+```
 
-# Cài đặt dependencies
+### Bước 4.2: Cài đặt dependencies
+
+```bash
 pip install -r requirements.txt
+```
 
-# Tạo file .env (copy từ .env.example)
-copy .env.example .env
+### Bước 4.3: Chạy Backend
 
-# Chạy server
+```bash
 python main.py
 ```
 
-Server chạy tại: `http://localhost:8000`
+Kiểm tra: http://localhost:8000/docs
 
 ---
 
-## Bước 4: Cài đặt Frontend
+## V. CÀI ĐẶT FRONTEND
 
 ```bash
 cd client
-
-# Cài đặt dependencies
 npm install
-
-# Chạy development server
 npm run dev
 ```
 
-Frontend chạy tại: `http://localhost:3000`
+Truy cập: http://localhost:3000
 
 ---
 
-## Tài khoản Test
+## VI. TÀI KHOẢN MẪU
 
-| Username | Password | Role | Quyền xem sách |
-|----------|----------|------|----------------|
-| `ADMIN_USER` | `Admin123` | Admin | Tất cả |
-| `LIBRARIAN_USER` | `Librarian123` | Librarian | Đến Confidential |
-| `STAFF_USER` | `Staff123` | Staff | Đến Internal |
-| `READER_USER` | `Reader123` | Reader | Chỉ Public |
+| Username | Password | Role | Mức truy cập |
+|----------|----------|------|--------------|
+| admin_user | Admin123 | ADMIN | TOP_SECRET (thấy tất cả) |
+| librarian_user | Librarian123 | LIBRARIAN | CONFIDENTIAL |
+| staff_user | Staff123 | STAFF | INTERNAL |
+| reader_user | Reader123 | READER | PUBLIC |
 
 ---
 
-## Cấu trúc thư mục
+## VII. KIỂM TRA OLS HOẠT ĐỘNG ĐÚNG
 
+| User | Sách phải thấy |
+|------|----------------|
+| READER | Chỉ sách PUBLIC |
+| STAFF | PUBLIC + INTERNAL |
+| LIBRARIAN | PUBLIC + INTERNAL + CONFIDENTIAL |
+| ADMIN | Tất cả (bao gồm TOP_SECRET) |
+
+---
+
+## VIII. XỬ LÝ LỖI THƯỜNG GẶP
+
+### Lỗi ORA-01017: invalid credential
+
+**Nguyên nhân:** Sai password trong `.env`
+
+**Giải pháp:** 
+```env
+DB_PASSWORD=Library123
+DB_SERVICE=FREEPDB1
 ```
-WebThuVien/
-├── client/                 # Frontend Next.js
-│   ├── app/               # App Router
-│   │   ├── dashboard/     # Các trang dashboard
-│   │   └── page.tsx       # Trang login
-│   └── lib/               # Utilities
-│
-├── server/                 # Backend FastAPI
-│   ├── app/
-│   │   ├── routers/       # API endpoints
-│   │   ├── repositories/  # Database queries
-│   │   ├── models/        # Pydantic schemas
-│   │   └── database.py    # Database connection
-│   └── scripts/
-│       └── setup/         # SQL setup scripts
-│
-└── docs/                   # Documentation
-    ├── OLS_GUIDE.md       # Hướng dẫn OLS
-    └── SETUP_GUIDE.md     # File này
+
+### Lỗi ORA-28110: VPD policy function has error
+
+**Nguyên nhân:** VPD function bị lỗi
+
+**Giải pháp:** Drop VPD policies
+
+```sql
+ALTER SESSION SET CONTAINER = FREEPDB1;
+
+-- Liệt kê policies
+SELECT policy_name, object_name FROM dba_policies WHERE object_owner = 'LIBRARY';
+
+-- Drop từng policy
+BEGIN
+    DBMS_RLS.DROP_POLICY('LIBRARY', 'BOOKS', 'VPD_BOOKS');
+EXCEPTION WHEN OTHERS THEN NULL;
+END;
+/
+
+BEGIN
+    DBMS_RLS.DROP_POLICY('LIBRARY', 'USER_INFO', 'VPD_USER_INFO');
+EXCEPTION WHEN OTHERS THEN NULL;
+END;
+/
+
+BEGIN
+    DBMS_RLS.DROP_POLICY('LIBRARY', 'BORROW_HISTORY', 'VPD_BORROW_HISTORY');
+EXCEPTION WHEN OTHERS THEN NULL;
+END;
+/
+
+COMMIT;
 ```
+
+### Lỗi 400 Bad Request cho /api/audit
+
+**Nguyên nhân:** LIBRARY user không có quyền SELECT trên audit trail
+
+**Giải pháp:**
+```sql
+GRANT SELECT ON audsys.unified_audit_trail TO library;
+```
+
+### Lỗi 400 Bad Request cho /api/profiles
+
+**Nguyên nhân:** LIBRARY user không có quyền SELECT trên dba_profiles
+
+**Giải pháp:**
+```sql
+GRANT SELECT ON dba_profiles TO library;
+GRANT SELECT ON dba_users TO library;
+```
+
+### Text tiếng Việt bị lỗi ký tự (???)
+
+**Nguyên nhân:** Encoding không đúng khi insert qua sqlplus
+
+**Giải pháp:** 
+1. Data mẫu đã được chuyển sang không dấu
+2. Thêm data mới qua Frontend (form thêm sách) để đảm bảo UTF-8
 
 ---
 
-## Troubleshooting
+## IX. DATABASE VAULT (TÙY CHỌN)
 
-### 1. Không thể kết nối database
+**Lưu ý:** Database Vault có thể không khả dụng trong Oracle 23ai Free.
+
+```sql
+-- Enable Database Vault
+@/opt/oracle/scripts/setup/18_setup_database_vault.sql
+EXIT;
+```
 
 ```bash
-# Kiểm tra container đang chạy
-docker ps
-
-# Kiểm tra logs
-docker logs oracle23ai
-
-# Kiểm tra port 1521
-netstat -an | grep 1521
+docker restart oracle23ai
 ```
 
-### 2. Backend báo lỗi connection
-
-Kiểm tra file `.env`:
+```sql
+ALTER SESSION SET CONTAINER = FREEPDB1;
+@/opt/oracle/scripts/setup/19_setup_dv_realms.sql
 ```
-DB_USER=library
-DB_PASSWORD=Library123
-DB_DSN=localhost:1521/FREEPDB1
-```
-
-### 3. Frontend không load được dữ liệu
-
-- Kiểm tra Backend đang chạy (`http://localhost:8000/docs`)
-- Kiểm tra CORS settings
-- Xem Console log trong browser
-
-### 4. OLS không hoạt động
-
-Xem chi tiết trong file `docs/OLS_GUIDE.md`.
 
 ---
 
-## API Endpoints
-
-### Authentication
-- `POST /api/auth/login` - Đăng nhập
-
-### Books
-- `GET /api/books` - Lấy danh sách sách
-- `GET /api/books/{id}` - Chi tiết sách
-- `POST /api/books` - Thêm sách mới
-- `PUT /api/books/{id}` - Cập nhật sách
-- `DELETE /api/books/{id}` - Xóa sách
-
-### Users
-- `GET /api/users` - Lấy danh sách users
-- `POST /api/users` - Thêm user mới
-
-### Borrow
-- `GET /api/borrow` - Danh sách mượn trả
-- `POST /api/borrow` - Mượn sách
-- `PUT /api/borrow/{id}/return` - Trả sách
-
----
-
-## Swagger Documentation
-
-Khi Backend đang chạy, truy cập:
-- **Swagger UI**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`
+*Cập nhật: 30/12/2024*

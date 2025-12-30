@@ -1,225 +1,397 @@
-# Hướng dẫn Oracle Label Security (OLS)
+# OLS - Oracle Label Security trong Du An Thu Vien
 
-## Tổng quan
+## I. TONG QUAN
 
-Oracle Label Security (OLS) là tính năng bảo mật cấp hàng (Row-Level Security) của Oracle Database, cho phép kiểm soát truy cập dữ liệu dựa trên nhãn bảo mật.
+**Oracle Label Security (OLS)** la tinh nang bao mat theo mo hinh **MAC (Mandatory Access Control)** cua Oracle. OLS kiem soat truy cap du lieu dua tren **nhan (labels)** duoc gan cho du lieu va nguoi dung.
 
-Trong hệ thống Thư viện này, OLS được sử dụng để:
-- Giới hạn quyền xem sách theo mức độ nhạy cảm (Sensitivity Level)
-- Đảm bảo nhân viên chỉ thấy dữ liệu phù hợp với vai trò của họ
+### OLS khac gi VPD?
 
----
+| Tieu chi | VPD | OLS |
+|----------|-----|-----|
+| Mo hinh | Application-level logic | MAC (Mandatory Access Control) |
+| Cach hoat dong | Viet code function | Gan labels |
+| Do linh hoat | Cao (viet logic tuy y) | Thap (theo cau truc labels) |
+| Bao mat | Phu thuoc vao code | Chuan bao mat cap cao |
+| Phu hop cho | Row-level security don gian | Du lieu nhay cam, phan cap bao mat |
 
-## Cấu trúc OLS trong Project
-
-### 1. Policy: `LIBRARY_POLICY`
-
-Policy này áp dụng cho bảng `BOOKS` với cột nhãn `OLS_LABEL`.
-
-### 2. Các mức bảo mật (Levels)
-
-| Level | Giá trị | Mô tả |
-|-------|---------|-------|
-| `PUB` | 1000 | PUBLIC - Công khai |
-| `INT` | 2000 | INTERNAL - Nội bộ |
-| `CONF` | 3000 | CONFIDENTIAL - Bí mật |
-| `TS` | 4000 | TOP_SECRET - Tối mật |
-
-### 3. Compartments
-
-| Compartment | Mô tả |
-|-------------|-------|
-| `LIB` | Thư viện |
-| `HR` | Nhân sự |
-| `FIN` | Tài chính |
-
-### 4. Groups
-
-| Group | Mô tả |
-|-------|-------|
-| `HQ` | Trụ sở chính |
-| `BR_A` | Chi nhánh A |
-| `BR_B` | Chi nhánh B |
-
----
-
-## Phân quyền User theo OLS
-
-### User Labels
-
-| User | Max Read Label | Privileges | Mô tả |
-|------|----------------|------------|-------|
-| `ADMIN_USER` | `TS:LIB,HR,FIN:HQ` | `FULL` | Xem TẤT CẢ sách |
-| `LIBRARIAN_USER` | `CONF:LIB:HQ` | - | Xem đến CONFIDENTIAL |
-| `STAFF_USER` | `INT:LIB:BR_A` | - | Xem đến INTERNAL |
-| `READER_USER` | `PUB` | - | Chỉ xem PUBLIC |
-
-### Kết quả mong đợi
-
-| Sensitivity Level | ADMIN | LIBRARIAN | STAFF | READER |
-|-------------------|-------|-----------|-------|--------|
-| PUBLIC | ✅ | ✅ | ✅ | ✅ |
-| INTERNAL | ✅ | ✅ | ✅ | ❌ |
-| CONFIDENTIAL | ✅ | ✅ | ❌ | ❌ |
-| TOP_SECRET | ✅ | ❌ | ❌ | ❌ |
-
----
-
-## Proxy Authentication
-
-Hệ thống sử dụng **Proxy Authentication** để áp dụng OLS:
+### Cau truc nhan OLS
 
 ```
-Frontend → Backend (FastAPI) → Oracle DB
-                    ↓
-            LIBRARY[LIBRARIAN_USER]
-                    ↓
-            Session User = LIBRARIAN_USER
-            OLS Policy áp dụng theo label của LIBRARIAN_USER
+LEVEL:COMPARTMENT,COMPARTMENT:GROUP
+  |        |                  |
+  |        |                  +-- Nhom to chuc (chi nhanh)
+  |        +-- Linh vuc hoat dong
+  +-- Muc do nhay cam
 ```
 
-### Cách hoạt động
+Vi du: `TS:LIB,HR,FIN:HQ`
+- Level: TS (TOP_SECRET)
+- Compartments: LIB, HR, FIN
+- Group: HQ
 
-1. User login với credentials (ví dụ: `LIBRARIAN_USER / Librarian123`)
-2. Backend xác thực và lấy `oracle_username` từ `user_info`
-3. Backend tạo **Proxy Connection**: `LIBRARY[LIBRARIAN_USER]`
-4. Oracle nhận diện session là `LIBRARIAN_USER`
-5. OLS tự động lọc dữ liệu theo label của `LIBRARIAN_USER`
+---
 
-### Code Implementation
+## II. CAU HINH OLS TRONG DU AN
+
+### File Scripts
+
+| Script | Chuc nang |
+|--------|-----------|
+| `15_enable_ols_system.sql` | Enable OLS o CDB Root |
+| `16_enable_ols_pdb.sql` | Enable OLS o PDB (FREEPDB1) |
+| `05_setup_ols.sql` | Tao policy, levels, labels, gan cho users |
+| `08_create_ols_trigger.sql` | Tao trigger tu dong gan label |
+| `17_fix_ols_permissions.sql` | Fix quyen neu bi loi |
+
+---
+
+## III. CAC THANH PHAN OLS
+
+### 1. Policy
+
+**LIBRARY_POLICY** - Policy chinh cho du an
+
+```sql
+SA_SYSDBA.CREATE_POLICY(
+    policy_name      => 'LIBRARY_POLICY',
+    column_name      => 'OLS_LABEL',  -- Ten cot luu label trong bang
+    default_options  => 'READ_CONTROL,WRITE_CONTROL,CHECK_CONTROL'
+);
+```
+
+### 2. Levels (Muc do nhay cam)
+
+| Level Num | Short Name | Long Name | Mo ta |
+|-----------|------------|-----------|-------|
+| 1000 | PUB | PUBLIC | Cong khai cho tat ca |
+| 2000 | INT | INTERNAL | Noi bo, chi nhan vien |
+| 3000 | CONF | CONFIDENTIAL | Mat, chi quan ly |
+| 4000 | TS | TOP_SECRET | Tuyet mat, chi admin |
+
+```sql
+SA_COMPONENTS.CREATE_LEVEL(
+    policy_name  => 'LIBRARY_POLICY',
+    level_num    => 1000,
+    short_name   => 'PUB',
+    long_name    => 'PUBLIC'
+);
+```
+
+### 3. Compartments (Linh vuc)
+
+| Comp Num | Short Name | Long Name | Mo ta |
+|----------|------------|-----------|-------|
+| 100 | LIB | LIBRARY | Linh vuc thu vien |
+| 200 | HR | HUMAN_RESOURCES | Nhan su |
+| 300 | FIN | FINANCE | Tai chinh |
+
+```sql
+SA_COMPONENTS.CREATE_COMPARTMENT(
+    policy_name  => 'LIBRARY_POLICY',
+    comp_num     => 100,
+    short_name   => 'LIB',
+    long_name    => 'LIBRARY'
+);
+```
+
+### 4. Groups (Chi nhanh)
+
+| Group Num | Short Name | Long Name | Parent |
+|-----------|------------|-----------|--------|
+| 10 | HQ | HEADQUARTERS | NULL (goc) |
+| 20 | BR_A | BRANCH_A | HQ |
+| 30 | BR_B | BRANCH_B | HQ |
+
+```sql
+SA_COMPONENTS.CREATE_GROUP(
+    policy_name  => 'LIBRARY_POLICY',
+    group_num    => 10,
+    short_name   => 'HQ',
+    long_name    => 'HEADQUARTERS'
+);
+
+SA_COMPONENTS.CREATE_GROUP(
+    policy_name  => 'LIBRARY_POLICY',
+    group_num    => 20,
+    short_name   => 'BR_A',
+    long_name    => 'BRANCH_A',
+    parent_name  => 'HQ'  -- Con cua HQ
+);
+```
+
+### 5. Labels (Nhan du lieu)
+
+| Tag | Label String | Mo ta |
+|-----|--------------|-------|
+| 1000 | PUB | Sach cong khai |
+| 2000 | INT:LIB | Sach noi bo thu vien |
+| 3000 | CONF:LIB | Sach mat thu vien |
+| 3500 | CONF:LIB:HQ | Sach mat tru so |
+| 4000 | TS:LIB,HR,FIN:HQ | Tai lieu tuyet mat |
+
+```sql
+SA_LABEL_ADMIN.CREATE_LABEL('LIBRARY_POLICY', 1000, 'PUB');
+SA_LABEL_ADMIN.CREATE_LABEL('LIBRARY_POLICY', 2000, 'INT:LIB');
+SA_LABEL_ADMIN.CREATE_LABEL('LIBRARY_POLICY', 3000, 'CONF:LIB');
+SA_LABEL_ADMIN.CREATE_LABEL('LIBRARY_POLICY', 4000, 'TS:LIB,HR,FIN:HQ');
+```
+
+---
+
+## IV. GAN LABELS CHO USERS
+
+| User | Max Read Label | Privileges | Quyen xem |
+|------|----------------|------------|-----------|
+| ADMIN_USER | TS:LIB,HR,FIN:HQ | FULL | Tat ca sach |
+| LIBRARIAN_USER | CONF:LIB:HQ | - | PUBLIC, INTERNAL, CONFIDENTIAL |
+| STAFF_USER | INT:LIB | - | PUBLIC, INTERNAL |
+| READER_USER | PUB | - | Chi PUBLIC |
+| LIBRARY | TS:LIB,HR,FIN:HQ | FULL | Tat ca (schema owner) |
+
+```sql
+-- Gan label cho ADMIN_USER
+SA_USER_ADMIN.SET_USER_LABELS(
+    policy_name   => 'LIBRARY_POLICY',
+    user_name     => 'ADMIN_USER',
+    max_read_label => 'TS:LIB,HR,FIN:HQ'
+);
+
+-- Cap quyen FULL cho ADMIN_USER
+SA_USER_ADMIN.SET_USER_PRIVS(
+    policy_name => 'LIBRARY_POLICY',
+    user_name   => 'ADMIN_USER',
+    privileges  => 'FULL'
+);
+
+-- Gan label cho READER_USER (chi doc PUBLIC)
+SA_USER_ADMIN.SET_USER_LABELS(
+    policy_name   => 'LIBRARY_POLICY',
+    user_name     => 'READER_USER',
+    max_read_label => 'PUB'
+);
+```
+
+---
+
+## V. AP DUNG POLICY LEN BANG
+
+### Bang BOOKS
+
+```sql
+SA_POLICY_ADMIN.APPLY_TABLE_POLICY(
+    policy_name    => 'LIBRARY_POLICY',
+    schema_name    => 'LIBRARY',
+    table_name     => 'BOOKS',
+    table_options  => 'READ_CONTROL,WRITE_CONTROL,CHECK_CONTROL,LABEL_DEFAULT'
+);
+```
+
+**Table Options:**
+- `READ_CONTROL`: Kiem soat doc du lieu
+- `WRITE_CONTROL`: Kiem soat ghi du lieu
+- `CHECK_CONTROL`: Kiem tra label khi insert/update
+- `LABEL_DEFAULT`: Tu dong gan label mac dinh neu khong chi dinh
+
+### Cap nhat labels cho du lieu hien co
+
+```sql
+-- Sach PUBLIC
+UPDATE library.books 
+SET ols_label = CHAR_TO_LABEL('LIBRARY_POLICY', 'PUB')
+WHERE sensitivity_level = 'PUBLIC';
+
+-- Sach INTERNAL
+UPDATE library.books 
+SET ols_label = CHAR_TO_LABEL('LIBRARY_POLICY', 'INT:LIB')
+WHERE sensitivity_level = 'INTERNAL';
+
+-- Sach CONFIDENTIAL
+UPDATE library.books 
+SET ols_label = CHAR_TO_LABEL('LIBRARY_POLICY', 'CONF:LIB')
+WHERE sensitivity_level = 'CONFIDENTIAL';
+
+-- Sach TOP_SECRET
+UPDATE library.books 
+SET ols_label = CHAR_TO_LABEL('LIBRARY_POLICY', 'TS:LIB,HR,FIN:HQ')
+WHERE sensitivity_level = 'TOP_SECRET';
+
+COMMIT;
+```
+
+---
+
+## VI. KIEM TRA OLS HOAT DONG
+
+### 1. Kiem tra labels da gan cho users
+
+```sql
+SELECT user_name, max_read_label 
+FROM lbacsys.dba_sa_user_labels 
+WHERE policy_name = 'LIBRARY_POLICY';
+```
+
+Ket qua mong doi:
+
+```
+USER_NAME        MAX_READ_LABEL
+---------------- ----------------
+ADMIN_USER       TS:LIB,HR,FIN:HQ
+LIBRARIAN_USER   CONF:LIB:HQ
+STAFF_USER       INT:LIB
+READER_USER      PUB
+LIBRARY          TS:LIB,HR,FIN:HQ
+```
+
+### 2. Kiem tra labels tren du lieu
+
+```sql
+SELECT book_id, title, sensitivity_level, 
+       LABEL_TO_CHAR('LIBRARY_POLICY', ols_label) as label_string
+FROM library.books;
+```
+
+### 3. Test quyen xem
+
+**Dang nhap READER_USER:**
+```sql
+CONNECT reader_user/Reader123@localhost:1521/FREEPDB1
+SELECT COUNT(*) FROM library.books;
+-- Ket qua: Chi thay sach PUBLIC
+```
+
+**Dang nhap ADMIN_USER:**
+```sql
+CONNECT admin_user/Admin123@localhost:1521/FREEPDB1
+SELECT COUNT(*) FROM library.books;
+-- Ket qua: Thay tat ca sach
+```
+
+---
+
+## VII. MO HINH DOMINANCE (CHI PHOI)
+
+OLS su dung mo hinh **dominance** de kiem tra quyen:
+
+```
+User Label: CONF:LIB:HQ
+
+Co the doc:
+  - PUB           (level thap hon, khong compartment)
+  - INT:LIB       (level thap hon, compartment LIB)
+  - CONF:LIB      (level bang, compartment LIB)
+  - CONF:LIB:HQ   (level bang, compartment LIB, group HQ)
+
+KHONG the doc:
+  - TS:...        (level cao hon)
+  - CONF:HR       (compartment khac)
+  - CONF:LIB:BR_A (group khac)
+```
+
+**Quy tac:**
+1. Level cua user >= Level cua du lieu
+2. User phai co TAT CA compartments cua du lieu
+3. User phai thuoc group cua du lieu (hoac group cha)
+
+---
+
+## VIII. BIEU DIEN TRONG UNG DUNG
+
+### Frontend
+
+Trang Sach hien thi cot "Do Mat (OLS)":
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  ID  │  TEN SACH           │  DO MAT (OLS)  │  SO LUONG    │
+├──────┼─────────────────────┼────────────────┼──────────────┤
+│  1   │  Lap trinh Python   │  CONG KHAI     │     5        │
+│  2   │  Co so du lieu      │  CONG KHAI     │     3        │
+│  3   │  Bao mat he thong   │  NOI BO        │     2        │
+│  4   │  Nghien cuu AI      │  BI MAT        │     1        │
+│  5   │  Tai lieu mat       │  TUYET MAT     │     1        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**READER_USER** chi thay sach #1, #2 (CONG KHAI)
+**ADMIN_USER** thay tat ca 5 sach
+
+### Backend
+
+Su dung Proxy Connection de OLS tu dong ap dung:
 
 ```python
-# server/app/database.py
-def get_proxy_connection(cls, username: str) -> oracledb.Connection:
-    return oracledb.connect(
-        user=f"{settings.DB_USER}[{username.upper()}]",
-        password=settings.DB_PASSWORD,
-        dsn=settings.DB_DSN
-    )
+# server/app/dependencies.py
+def get_user_db(user: dict = Depends(get_current_user_info)):
+    oracle_username = user.get("oracle_username")
+    return Database.get_proxy_connection(oracle_username)
 ```
 
 ---
 
-## Cấu hình Database
+## IX. XU LY LOI THUONG GAP
 
-### 1. Enable OLS (Chạy 1 lần)
+### 1. ORA-12416: policy already exists
 
-```sql
--- Chạy với SYS AS SYSDBA
-ALTER SESSION SET CONTAINER = CDB$ROOT;
-EXEC LBACSYS.CONFIGURE_OLS;
-EXEC LBACSYS.OLS_ENFORCEMENT.ENABLE_OLS;
-
--- Trong PDB
-ALTER SESSION SET CONTAINER = FREEPDB1;
-EXEC LBACSYS.CONFIGURE_OLS;
-EXEC LBACSYS.OLS_ENFORCEMENT.ENABLE_OLS;
-
--- Restart Database sau khi enable
-```
-
-### 2. Cấp quyền Proxy
-
-```sql
--- Cho phép LIBRARY proxy cho các user
-ALTER USER ADMIN_USER GRANT CONNECT THROUGH LIBRARY;
-ALTER USER LIBRARIAN_USER GRANT CONNECT THROUGH LIBRARY;
-ALTER USER STAFF_USER GRANT CONNECT THROUGH LIBRARY;
-ALTER USER READER_USER GRANT CONNECT THROUGH LIBRARY;
-```
-
-### 3. Set User Labels
+Policy da ton tai, bo qua loi nay hoac drop truoc:
 
 ```sql
 BEGIN
-    -- ADMIN - Full access
-    SA_USER_ADMIN.SET_USER_PRIVS('LIBRARY_POLICY', 'ADMIN_USER', 'FULL');
-    SA_USER_ADMIN.SET_USER_LABELS('LIBRARY_POLICY', 'ADMIN_USER', 'TS:LIB,HR,FIN:HQ');
-    
-    -- LIBRARIAN - Up to CONFIDENTIAL
-    SA_USER_ADMIN.SET_USER_LABELS('LIBRARY_POLICY', 'LIBRARIAN_USER', 'CONF:LIB:HQ');
-    
-    -- STAFF - Up to INTERNAL
-    SA_USER_ADMIN.SET_USER_LABELS('LIBRARY_POLICY', 'STAFF_USER', 'INT:LIB:BR_A');
-    
-    -- READER - PUBLIC only
-    SA_USER_ADMIN.SET_USER_LABELS('LIBRARY_POLICY', 'READER_USER', 'PUB');
+    SA_SYSDBA.DROP_POLICY('LIBRARY_POLICY', TRUE);
+EXCEPTION WHEN OTHERS THEN NULL;
 END;
 /
 ```
 
----
+### 2. ORA-06598: insufficient INHERIT PRIVILEGES
 
-## Troubleshooting
-
-### 1. User thấy tất cả dữ liệu
-
-**Nguyên nhân có thể:**
-- OLS chưa được enable
-- Proxy connection không hoạt động
-- User có privilege `FULL` hoặc `READ`
-
-**Cách kiểm tra:**
+Thieu quyen:
 
 ```sql
--- Check OLS enabled
-SELECT VALUE FROM V$OPTION WHERE PARAMETER = 'Oracle Label Security';
-
--- Check user privileges
-SELECT * FROM LBACSYS.ALL_SA_USERS WHERE POLICY_NAME = 'LIBRARY_POLICY';
-
--- Check session user (trong Backend log)
-SELECT SYS_CONTEXT('USERENV', 'SESSION_USER'), 
-       SYS_CONTEXT('USERENV', 'PROXY_USER') 
-FROM DUAL;
+GRANT INHERIT PRIVILEGES ON USER SYS TO LBACSYS;
+GRANT INHERIT PRIVILEGES ON USER LBACSYS TO SYS;
 ```
 
-### 2. Lỗi ORA-12458: Oracle Label Security is not enabled
+### 3. User khong thay du lieu (tat ca bi filter)
 
-**Giải pháp:**
+Kiem tra label cua user:
+
 ```sql
--- Chạy với SYS
-EXEC LBACSYS.CONFIGURE_OLS;
-EXEC LBACSYS.OLS_ENFORCEMENT.ENABLE_OLS;
--- Restart Database
+SELECT user_name, max_read_label 
+FROM lbacsys.dba_sa_user_labels 
+WHERE user_name = 'LIBRARIAN_USER';
 ```
 
-### 3. Proxy connection trả về session_user = LIBRARY
+Neu max_read_label NULL hoac sai, gan lai:
 
-**Nguyên nhân:** Pool không hỗ trợ proxy trong thin mode.
+```sql
+SA_USER_ADMIN.SET_USER_LABELS(
+    policy_name   => 'LIBRARY_POLICY',
+    user_name     => 'LIBRARIAN_USER',
+    max_read_label => 'CONF:LIB:HQ'
+);
+```
 
-**Giải pháp:** Sử dụng direct connection với cú pháp `LIBRARY[USER]`:
-```python
-oracledb.connect(user=f"LIBRARY[{username}]", password=..., dsn=...)
+### 4. Sach khong co ols_label
+
+Cap nhat labels:
+
+```sql
+UPDATE library.books 
+SET ols_label = CHAR_TO_LABEL('LIBRARY_POLICY', 'PUB')
+WHERE sensitivity_level = 'PUBLIC' AND ols_label IS NULL;
 ```
 
 ---
 
-## Scripts Setup
+## X. KET LUAN
 
-| Script | Mô tả |
-|--------|-------|
-| `05_setup_ols.sql` | Tạo Policy, Levels, Compartments, Groups |
-| `08_create_ols_trigger.sql` | Trigger tự động gán label cho sách mới |
-| `09_fix_ols_labels.sql` | Fix lại labels cho users |
-| `10_setup_proxy_auth.sql` | Cấp quyền proxy |
-| `15_enable_ols_system.sql` | Enable OLS system-wide |
-| `16_enable_ols_pdb.sql` | Enable OLS trong PDB |
-| `17_fix_ols_permissions.sql` | Fix permissions cho tất cả users |
+OLS trong du an Thu Vien:
 
----
+- **Mo hinh**: MAC (Mandatory Access Control)
+- **Bang ap dung**: BOOKS
+- **4 Levels**: PUBLIC, INTERNAL, CONFIDENTIAL, TOP_SECRET
+- **3 Compartments**: LIB, HR, FIN
+- **3 Groups**: HQ, BR_A, BR_B
+- **5 Users**: ADMIN, LIBRARIAN, STAFF, READER, LIBRARY
 
-## Testing Checklist
-
-- [ ] Login với `admin_user` → Thấy TẤT CẢ sách
-- [ ] Login với `librarian_user` → KHÔNG thấy sách TOP_SECRET
-- [ ] Login với `staff_user` → Chỉ thấy PUBLIC và INTERNAL
-- [ ] Tạo sách mới với sensitivity_level → Label tự động được gán
-- [ ] Check Backend log → `session_user` phải khớp với user login
-
----
-
-## Tài liệu tham khảo
-
-- [Oracle Label Security Administrator's Guide](https://docs.oracle.com/en/database/oracle/oracle-database/23/olsag/)
-- [python-oracledb Documentation](https://python-oracledb.readthedocs.io/)
+OLS dam bao nguoi dung chi thay sach phu hop voi muc do bao mat cua ho, **khong the bypass** ke ca co quyen SYS (tru khi co privilege FULL).
