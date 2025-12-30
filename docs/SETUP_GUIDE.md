@@ -1,155 +1,211 @@
-# 🛠️ Hướng Dẫn Cài Đặt Chi Tiết (Step-by-Step Setup Guide)
+# Hướng dẫn Cài đặt và Chạy Hệ thống Thư viện
 
-Tài liệu này hướng dẫn bạn dựng lại toàn bộ hệ thống từ mã nguồn (Source Code).
+## Yêu cầu hệ thống
 
----
+### Docker
+- Docker Desktop (Windows/Mac) hoặc Docker Engine (Linux)
+- Tối thiểu 4GB RAM cho Oracle Database
 
-## 💻 1. Yêu Cầu Hệ Thống (Prerequisites)
+### Backend (Python)
+- Python 3.10+
+- pip
 
-Trước khi bắt đầu, hãy đảm bảo máy tính của bạn đã cài đặt:
-
-1.  **Docker Desktop**: Để chạy Oracle Database.
-    *   [Tải Docker Desktop](https://www.docker.com/products/docker-desktop/)
-    *   *Lưu ý*: Oracle Database khá nặng, hãy cấu hình Docker cho phép dùng ít nhất **4GB RAM**.
-2.  **Node.js**: Để chạy trang web (Frontend).
-    *   Phiên bản: 18.17.0 trở lên.
-    *   [Tải Node.js](https://nodejs.org/)
-3.  **Python**: Để chạy API (Backend).
-    *   Phiên bản: 3.10 trở lên.
-    *   [Tải Python](https://www.python.org/)
-4.  **Git**: Để tải mã nguồn (nếu cần).
+### Frontend (Next.js)
+- Node.js 18+
+- npm hoặc yarn
 
 ---
 
-## 🗄️ 2. Cài Đặt Database (Oracle 23ai)
+## Bước 1: Khởi động Oracle Database
 
-Đây là bước quan trọng nhất. Chúng ta dùng Docker để không phải cài trực tiếp Oracle vào máy (rất nặng và khó gỡ).
-
-### Bước 2.1: Khởi động Database
-1.  Mở Terminal (CMD hoặc PowerShell).
-2.  Đi vào thư mục `server`:
-    ```bash
-    cd server
-    ```
-3.  Chạy lệnh Docker Compose:
-    ```bash
-    docker-compose up -d
-    ```
-    *Lần đầu chạy sẽ hơi lâu (khoảng 1-2GB tải về).*
-4.  Kiểm tra xem Database đã chạy chưa:
-    ```bash
-    docker ps
-    ```
-    Nếu trạng thái là `(healthy)` thì đã sẵn sàng. Nếu đang `(staring)`, hãy đợi thêm vài phút.
-
-### Bước 2.2: Nạp Dữ Liệu & Chính Sách Bảo Mật
-Database mới tạo sẽ trống trơn. Chúng ta cần chạy các file kịch bản (script) SQL để tạo bảng và cài đặt bảo mật.
-
-Chạy lần lượt các lệnh sau trong Terminal:
-
-**1. Tạo Users (SysAdmin & Library Owner)**
 ```bash
-docker exec -i oracle23ai sqlplus sys/Oracle123 as sysdba @"/opt/oracle/scripts/setup/01_create_users.sql"
+# Pull và chạy Oracle 23ai Free
+docker run -d \
+  --name oracle23ai \
+  -p 1521:1521 \
+  -e ORACLE_PWD=Oracle123 \
+  -v ./server/scripts/setup:/opt/oracle/scripts/setup \
+  container-registry.oracle.com/database/free:latest
+
+# Chờ database khởi động (khoảng 2-5 phút)
+docker logs -f oracle23ai
+# Khi thấy "DATABASE IS READY TO USE!" thì tiếp tục
 ```
-
-**2. Tạo Bảng & Dữ liệu mẫu (Schema & Seed Data)**
-```bash
-# Lưu ý: Password là Library123
-docker exec -i oracle23ai sqlplus library/Library123@localhost:1521/THUVIEN_PDB @"/opt/oracle/scripts/setup/02_create_schema.sql"
-
-docker exec -i oracle23ai sqlplus library/Library123@localhost:1521/THUVIEN_PDB @"/opt/oracle/scripts/setup/03_seed_data.sql"
-```
-
-**3. Kích hoạt Bảo mật (Security Features)**
-```bash
-# VPD (Virtual Private Database)
-docker exec -i oracle23ai sqlplus library/Library123@localhost:1521/THUVIEN_PDB @"/opt/oracle/scripts/setup/04_setup_vpd.sql"
-
-# Data Redaction (Che giấu dữ liệu)
-docker exec -i oracle23ai sqlplus library/Library123@localhost:1521/THUVIEN_PDB @"/opt/oracle/scripts/setup/05_setup_redaction.sql"
-
-# OLS & Audit (Cần quyền quản trị cao nhất)
-docker exec -i oracle23ai sqlplus sys/Oracle123@localhost:1521/THUVIEN_PDB as sysdba @"/opt/oracle/scripts/setup/06_setup_ols_audit.sql"
-```
-
-✅ **Xong phần Database!**
 
 ---
 
-## ⚙️ 3. Cài Đặt Backend (Python FastAPI)
+## Bước 2: Setup Database Schema
 
-Backend là cầu nối giữa Web và Database.
+Chạy các scripts theo thứ tự:
 
-### Bước 3.1: Tạo môi trường ảo (Virtual Environment)
-Vẫn ở trong thư mục `server`:
 ```bash
-# Tạo môi trường ảo tên là 'venv'
+# Kết nối vào container
+docker exec -it oracle23ai sqlplus sys/Oracle123@localhost:1521/FREEPDB1 as sysdba
+
+# Chạy từng script (trong sqlplus)
+@/opt/oracle/scripts/setup/01_create_users.sql
+@/opt/oracle/scripts/setup/02_create_tables.sql
+@/opt/oracle/scripts/setup/03_sample_data.sql
+@/opt/oracle/scripts/setup/05_setup_ols.sql
+@/opt/oracle/scripts/setup/08_create_ols_trigger.sql
+@/opt/oracle/scripts/setup/10_setup_proxy_auth.sql
+@/opt/oracle/scripts/setup/15_enable_ols_system.sql
+@/opt/oracle/scripts/setup/16_enable_ols_pdb.sql
+@/opt/oracle/scripts/setup/17_fix_ols_permissions.sql
+
+# Thoát sqlplus
+exit
+```
+
+**QUAN TRỌNG:** Sau khi chạy script 15 và 16, cần restart database:
+```bash
+docker restart oracle23ai
+```
+
+---
+
+## Bước 3: Cài đặt Backend
+
+```bash
+cd server
+
+# Tạo virtual environment
 python -m venv venv
 
-# Kích hoạt môi trường (Windows)
-venv\Scripts\activate
+# Activate (Windows)
+.\venv\Scripts\activate
 
-# Kích hoạt môi trường (Mac/Linux)
-# source venv/bin/activate
-```
-*(Khi kích hoạt thành công, đầu dòng lệnh sẽ có chữ `(venv)`)*
+# Activate (Linux/Mac)
+source venv/bin/activate
 
-### Bước 3.2: Cài đặt thư viện
-```bash
+# Cài đặt dependencies
 pip install -r requirements.txt
-```
 
-### Bước 3.3: Cấu hình kết nối
-Kiểm tra file `.env` trong thư mục `server`. Nếu chưa có, hãy copy từ `.env.example`:
-```bash
+# Tạo file .env (copy từ .env.example)
 copy .env.example .env
-```
-Nội dung mặc định thường đã đúng nếu bạn chạy Docker như hướng dẫn trên.
 
-### Bước 3.4: Chạy Server
-```bash
+# Chạy server
 python main.py
 ```
-Nếu thấy dòng chữ `Uvicorn running on http://0.0.0.0:8000`, chúc mừng bạn! Backend đã chạy.
+
+Server chạy tại: `http://localhost:8000`
 
 ---
 
-## 🎨 4. Cài Đặt Frontend (Web App)
+## Bước 4: Cài đặt Frontend
 
-Mở một cửa sổ Terminal **mới** (để giữ Backend đang chạy ở cửa sổ cũ).
-
-1.  Đi vào thư mục `client`:
-    ```bash
-    cd client
-    ```
-2.  Cài đặt các gói phụ thuộc (Dependencies):
-    ```bash
-    npm install
-    # Hoặc nếu dùng pnpm: pnpm install
-    # Hoặc nếu dùng yarn: yarn install
-    ```
-3.  Chạy ứng dụng:
-    ```bash
-    npm run dev
-    ```
-4.  Mở trình duyệt truy cập: `http://localhost:3000`
-
----
-
-## ❓ 5. Xử Lý Sự Cố (Troubleshooting)
-
-**Q: Lỗi `ORA-12541: TNS:no listener` khi chạy Backend?**
-A: Database chưa khởi động xong. Hãy đợi thêm 1-2 phút và thử lại. Dùng `docker ps` để xem trạng thái.
-
-**Q: Lỗi `ORA-28000: the account is locked`?**
-A: Tài khoản đăng nhập sai pass nhiều lần bị khóa. Hãy mở khóa bằng lệnh:
 ```bash
-docker exec -i oracle23ai sqlplus sys/Oracle123 as sysdba
-ALTER USER <ten_user> ACCOUNT UNLOCK;
+cd client
+
+# Cài đặt dependencies
+npm install
+
+# Chạy development server
+npm run dev
 ```
 
-**Q: Không cài được `cx_Oracle` hay `oracledb` trên Python?**
-A: Hãy chắc chắn bạn đã upgrade pip: `python -m pip install --upgrade pip`. Dự án này dùng `oracledb` (Thin mode) nên không cần cài Oracle Instant Client máy trạm.
+Frontend chạy tại: `http://localhost:3000`
 
 ---
-**Chúc bạn thành công!**
+
+## Tài khoản Test
+
+| Username | Password | Role | Quyền xem sách |
+|----------|----------|------|----------------|
+| `ADMIN_USER` | `Admin123` | Admin | Tất cả |
+| `LIBRARIAN_USER` | `Librarian123` | Librarian | Đến Confidential |
+| `STAFF_USER` | `Staff123` | Staff | Đến Internal |
+| `READER_USER` | `Reader123` | Reader | Chỉ Public |
+
+---
+
+## Cấu trúc thư mục
+
+```
+WebThuVien/
+├── client/                 # Frontend Next.js
+│   ├── app/               # App Router
+│   │   ├── dashboard/     # Các trang dashboard
+│   │   └── page.tsx       # Trang login
+│   └── lib/               # Utilities
+│
+├── server/                 # Backend FastAPI
+│   ├── app/
+│   │   ├── routers/       # API endpoints
+│   │   ├── repositories/  # Database queries
+│   │   ├── models/        # Pydantic schemas
+│   │   └── database.py    # Database connection
+│   └── scripts/
+│       └── setup/         # SQL setup scripts
+│
+└── docs/                   # Documentation
+    ├── OLS_GUIDE.md       # Hướng dẫn OLS
+    └── SETUP_GUIDE.md     # File này
+```
+
+---
+
+## Troubleshooting
+
+### 1. Không thể kết nối database
+
+```bash
+# Kiểm tra container đang chạy
+docker ps
+
+# Kiểm tra logs
+docker logs oracle23ai
+
+# Kiểm tra port 1521
+netstat -an | grep 1521
+```
+
+### 2. Backend báo lỗi connection
+
+Kiểm tra file `.env`:
+```
+DB_USER=library
+DB_PASSWORD=Library123
+DB_DSN=localhost:1521/FREEPDB1
+```
+
+### 3. Frontend không load được dữ liệu
+
+- Kiểm tra Backend đang chạy (`http://localhost:8000/docs`)
+- Kiểm tra CORS settings
+- Xem Console log trong browser
+
+### 4. OLS không hoạt động
+
+Xem chi tiết trong file `docs/OLS_GUIDE.md`.
+
+---
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/login` - Đăng nhập
+
+### Books
+- `GET /api/books` - Lấy danh sách sách
+- `GET /api/books/{id}` - Chi tiết sách
+- `POST /api/books` - Thêm sách mới
+- `PUT /api/books/{id}` - Cập nhật sách
+- `DELETE /api/books/{id}` - Xóa sách
+
+### Users
+- `GET /api/users` - Lấy danh sách users
+- `POST /api/users` - Thêm user mới
+
+### Borrow
+- `GET /api/borrow` - Danh sách mượn trả
+- `POST /api/borrow` - Mượn sách
+- `PUT /api/borrow/{id}/return` - Trả sách
+
+---
+
+## Swagger Documentation
+
+Khi Backend đang chạy, truy cập:
+- **Swagger UI**: `http://localhost:8000/docs`
+- **ReDoc**: `http://localhost:8000/redoc`
