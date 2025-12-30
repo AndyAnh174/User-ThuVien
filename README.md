@@ -4,7 +4,7 @@
 
 ![Project Status](https://img.shields.io/badge/Status-Completed-success)
 ![Oracle Database](https://img.shields.io/badge/Oracle-23ai-red)
-![Frontend](https://img.shields.io/badge/Frontend-Next.js_14-black)
+![Frontend](https://img.shields.io/badge/Frontend-Next.js_16-black)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI-teal)
 
 ---
