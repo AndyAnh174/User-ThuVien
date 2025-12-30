@@ -1,0 +1,54 @@
+
+Session altered.
+
+======================================
+1. CHECK PROXY USERS
+======================================
+
+PROXY		     CLIENT		  AUT FLAGS
+-------------------- -------------------- --- -----------------------------------
+LIBRARY 	     ADMIN_USER 	  NO  PROXY MAY ACTIVATE ALL CLIENT ROLES
+LIBRARY 	     LIBRARIAN_USER	  NO  PROXY MAY ACTIVATE ALL CLIENT ROLES
+LIBRARY 	     STAFF_USER 	  NO  PROXY MAY ACTIVATE ALL CLIENT ROLES
+LIBRARY 	     READER_USER	  NO  PROXY MAY ACTIVATE ALL CLIENT ROLES
+
+======================================
+2. CHECK OLS DATA LABELS
+======================================
+
+   BOOK_ID SENSITIVITY_LEVEL	 RAW_LABEL     TS_VAL
+---------- -------------------- ---------- ----------
+	 5 TOP_SECRET		      4000	 4000
+	41 TOP_SECRET		      4000	 4000
+
+======================================
+3. CHECK USER LABELS AND PRIVS
+======================================
+SELECT USER_NAME, MAX_READ_LABEL, PRIVILEGES
+                                  *
+ERROR at line 1:
+ORA-00904: "PRIVILEGES": invalid identifier
+Help: https://docs.oracle.com/error-help/db/ora-00904/
+
+
+======================================
+4. CHECK USER SYSTEM PRIVILEGES
+======================================
+
+GRANTEE
+--------------------------------------------------------------------------------------------------------------------------------
+GRANTED_ROLE
+--------------------------------------------------------------------------------------------------------------------------------
+STAFF_USER
+STAFF_ROLE
+
+LIBRARY
+CONNECT
+
+LIBRARY
+RESOURCE
+
+LIBRARIAN_USER
+LIBRARIAN_ROLE
+
+

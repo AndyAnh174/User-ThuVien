@@ -1,0 +1,12 @@
+
+Session altered.
+
+Fixing OLS Permissions...
+LIBRARY: FULL privileges granted.
+ADMIN_USER: FULL privileges granted.
+LIBRARIAN_USER: Label set to CONF.
+STAFF_USER: Label set to INT.
+All permissions fixed successfully.
+
+PL/SQL procedure successfully completed.
+

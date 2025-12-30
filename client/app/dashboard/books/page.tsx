@@ -395,8 +395,12 @@ export default function BooksPage() {
                                     >
                                         <option value="PUBLIC">CÔNG KHAI (Public)</option>
                                         <option value="INTERNAL">NỘI BỘ (Internal)</option>
-                                        <option value="CONFIDENTIAL">MẬT (Confidential)</option>
-                                        <option value="TOP_SECRET">TỐI MẬT (Top Secret)</option>
+                                        {(userRole === 'LIBRARIAN' || userRole === 'ADMIN') && (
+                                            <option value="CONFIDENTIAL">MẬT (Confidential)</option>
+                                        )}
+                                        {userRole === 'ADMIN' && (
+                                            <option value="TOP_SECRET">TỐI MẬT (Top Secret)</option>
+                                        )}
                                     </select>
                                 </div>
 

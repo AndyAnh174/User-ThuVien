@@ -1,0 +1,16 @@
+
+Session altered.
+
+Starting OLS Policy Re-application...
+Remove policy skipped/failed: ORA-06598: insufficient INHERIT PRIVILEGES
+privilege
+Applied policy successfully.
+
+PL/SQL procedure successfully completed.
+
+Update data failed (Maybe OLS column missing?): ORA-00904: "OLS_LABEL": invalid
+identifier
+
+PL/SQL procedure successfully completed.
+
+Force Apply Completed.

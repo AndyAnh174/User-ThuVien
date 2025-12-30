@@ -1,0 +1,35 @@
+
+SQL*Plus: Release 23.26.0.0.0 - Production on Tue Dec 30 00:41:10 2025
+Version 23.26.0.0.0
+
+Copyright (c) 1982, 2025, Oracle.  All rights reserved.
+
+Connected.
+
+Grant succeeded.
+
+Connected.
+    UPDATE library.books SET ols_label = CHAR_TO_LABEL('LIBRARY_POLICY', 'PUB') WHERE sensitivity_level = 'PUBLIC';
+                             *
+ERROR at line 6:
+ORA-06550: line 6, column 30:
+PL/SQL: ORA-00904: "OLS_LABEL": invalid identifier
+ORA-06550: line 6, column 5:
+PL/SQL: SQL Statement ignored
+ORA-06550: line 7, column 30:
+PL/SQL: ORA-00904: "OLS_LABEL": invalid identifier
+ORA-06550: line 7, column 5:
+PL/SQL: SQL Statement ignored
+ORA-06550: line 8, column 30:
+PL/SQL: ORA-00904: "OLS_LABEL": invalid identifier
+ORA-06550: line 8, column 5:
+PL/SQL: SQL Statement ignored
+ORA-06550: line 9, column 30:
+PL/SQL: ORA-00904: "OLS_LABEL": invalid identifier
+ORA-06550: line 9, column 5:
+PL/SQL: SQL Statement ignored
+Help: https://docs.oracle.com/error-help/db/ora-06550/
+
+
+Disconnected from Oracle AI Database 26ai Free Release 23.26.0.0.0 - Develop, Learn, and Run for Free
+Version 23.26.0.0.0

@@ -10,6 +10,7 @@ from ..database import Database, get_db
 from ..models import UserCreate, UserUpdate, UserResponse, SuccessResponse
 from ..repositories import UserRepository, OracleUserRepository
 from .auth import get_current_user_info
+from ..dependencies import get_user_db
 
 import oracledb
 
@@ -38,7 +39,7 @@ def require_admin_privilege(user_info: dict = Depends(get_current_user_info)):
 @router.get("", response_model=List[dict])
 async def get_users(
     user_info: dict = Depends(require_staff_privilege),
-    conn: oracledb.Connection = Depends(get_db)
+    conn: oracledb.Connection = Depends(get_user_db)
 ):
     """
     Get all users.
@@ -56,7 +57,7 @@ async def get_users(
 async def get_user(
     user_id: int,
     user_info: dict = Depends(require_staff_privilege),
-    conn: oracledb.Connection = Depends(get_db)
+    conn: oracledb.Connection = Depends(get_user_db)
 ):
     """
     Get specific user by ID

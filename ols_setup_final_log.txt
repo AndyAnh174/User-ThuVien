@@ -1,0 +1,108 @@
+ALTER USER lbacsys ACCOUNT UNLOCK
+*
+ERROR at line 1:
+ORA-65146: account cannot be unlocked in a PDB while it is locked in the root
+Help: https://docs.oracle.com/error-help/db/ora-65146/
+
+
+ALTER USER lbacsys IDENTIFIED BY "Lbacsys#123"
+*
+ERROR at line 1:
+ORA-65066: The specified changes must apply to all containers
+Help: https://docs.oracle.com/error-help/db/ora-65066/
+
+
+ERROR:
+ORA-65011: Pluggable database THUVIEN_PDB does not exist.
+Help: https://docs.oracle.com/error-help/db/ora-65011/
+
+
+
+PL/SQL procedure successfully completed.
+
+
+PL/SQL procedure successfully completed.
+
+
+PL/SQL procedure successfully completed.
+
+
+PL/SQL procedure successfully completed.
+
+
+PL/SQL procedure successfully completed.
+
+
+PL/SQL procedure successfully completed.
+
+
+PL/SQL procedure successfully completed.
+
+
+PL/SQL procedure successfully completed.
+
+UPDATE library.books
+               *
+ERROR at line 1:
+ORA-12406: This SQL statement is not authorized for this session by OLS policy
+LIBRARY_POLICY.
+Help: https://docs.oracle.com/error-help/db/ora-12406/
+
+
+UPDATE library.books
+               *
+ERROR at line 1:
+ORA-12406: This SQL statement is not authorized for this session by OLS policy
+LIBRARY_POLICY.
+Help: https://docs.oracle.com/error-help/db/ora-12406/
+
+
+UPDATE library.books
+               *
+ERROR at line 1:
+ORA-12406: This SQL statement is not authorized for this session by OLS policy
+LIBRARY_POLICY.
+Help: https://docs.oracle.com/error-help/db/ora-12406/
+
+
+UPDATE library.books
+               *
+ERROR at line 1:
+ORA-12406: This SQL statement is not authorized for this session by OLS policy
+LIBRARY_POLICY.
+Help: https://docs.oracle.com/error-help/db/ora-12406/
+
+
+
+1 row updated.
+
+
+1 row updated.
+
+
+1 row updated.
+
+
+2 rows updated.
+
+
+Commit complete.
+
+
+Grant succeeded.
+
+
+Grant succeeded.
+
+
+Grant succeeded.
+
+
+Grant succeeded.
+
+
+Grant succeeded.
+
+
+PL/SQL procedure successfully completed.
+

@@ -31,7 +31,8 @@ class Database:
             dsn=settings.DB_DSN,
             min=settings.DB_POOL_MIN,
             max=settings.DB_POOL_MAX,
-            increment=settings.DB_POOL_INCREMENT
+            increment=settings.DB_POOL_INCREMENT,
+            homogeneous=False  # Required for proxy authentication (OLS)
         )
         print(f"✅ Database pool created: {settings.DB_DSN}")
     
@@ -49,6 +50,18 @@ class Database:
         if cls._pool is None:
             cls.init_pool()
         return cls._pool.acquire()
+
+    @classmethod
+    def get_proxy_connection(cls, username: str) -> oracledb.Connection:
+        """Get a proxy connection for specific user"""
+        # Create direct connection with proxy authentication
+        # Pool acquire(user=...) may not work in thin mode
+        # Use direct connect with proxy_user parameter
+        return oracledb.connect(
+            user=f"{settings.DB_USER}[{username.upper()}]",
+            password=settings.DB_PASSWORD,
+            dsn=settings.DB_DSN
+        )
     
     @classmethod
     def release_connection(cls, connection: oracledb.Connection) -> None:

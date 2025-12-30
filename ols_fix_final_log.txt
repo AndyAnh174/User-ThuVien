@@ -1,0 +1,25 @@
+
+Session altered.
+
+
+Grant succeeded.
+
+
+PL/SQL procedure successfully completed.
+
+BEGIN
+*
+ERROR at line 1:
+ORA-12416: Oracle Label Security policy LIBRARY_POLICY is not found.
+ORA-06512: at "LBACSYS.LBAC_POLICY_ADMIN_INT", line 396
+ORA-06512: at "LBACSYS.LBAC_CACHE", line 295
+ORA-06512: at "LBACSYS.LBAC_POLICY_ADMIN_INT", line 364
+ORA-06512: at "LBACSYS.LBAC_POLICY_ADMIN", line 84
+ORA-06512: at line 3
+Help: https://docs.oracle.com/error-help/db/ora-12416/
+
+
+FAILED: Column OLS_LABEL still missing!
+
+PL/SQL procedure successfully completed.
+

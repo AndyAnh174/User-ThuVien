@@ -1,0 +1,21 @@
+
+SQL*Plus: Release 23.26.0.0.0 - Production on Tue Dec 30 00:45:22 2025
+Version 23.26.0.0.0
+
+Copyright (c) 1982, 2025, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle AI Database 26ai Free Release 23.26.0.0.0 - Develop, Learn, and Run for Free
+Version 23.26.0.0.0
+
+
+Session altered.
+
+Checking OLS Status in PDB...
+OLS Configured/Enabled in PDB.
+
+PL/SQL procedure successfully completed.
+
+PDB OLS Configuration Attempted.
+SQL> 

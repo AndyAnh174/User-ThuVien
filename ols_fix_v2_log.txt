@@ -1,0 +1,19 @@
+
+Session altered.
+
+
+PL/SQL procedure successfully completed.
+
+BEGIN
+*
+ERROR at line 1:
+ORA-06598: insufficient INHERIT PRIVILEGES privilege
+ORA-06512: at "LBACSYS.LBAC_POLICY_ADMIN", line 1
+ORA-06512: at line 3
+Help: https://docs.oracle.com/error-help/db/ora-06598/
+
+
+FAILED: Column OLS_LABEL still missing!
+
+PL/SQL procedure successfully completed.
+
