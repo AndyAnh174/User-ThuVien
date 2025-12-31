@@ -1,40 +1,111 @@
 version: '3.8'
 
 services:
+  # ============================================
+  # ORACLE DATABASE 23ai
+  # ============================================
   oracle-db:
     # Image chính thức - cần docker login container-registry.oracle.com trước
     image: container-registry.oracle.com/database/free:latest
     container_name: oracle23ai
     hostname: oracle23ai
     ports:
-      - "1521:1521"   # Oracle Listener
-      - "5500:5500"   # Enterprise Manager Express
+      - "1521:1521" # Oracle Listener
+      - "5500:5500" # Enterprise Manager Express
     environment:
       # Password cho SYS, SYSTEM và PDBADMIN
       ORACLE_PWD: "Oracle123"
       # Tên Pluggable Database
-      ORACLE_PDB: "THUVIEN_PDB"
+      ORACLE_PDB: "FREEPDB1"
       # Character set
       ORACLE_CHARACTERSET: "AL32UTF8"
     volumes:
       # Persistent data
       - oracle_data:/opt/oracle/oradata
-      # Scripts khởi tạo (chạy tự động lần đầu)
+      # Scripts khởi tạo
+      # - startup/*.sh chạy MỖI LẦN khởi động
+      # - setup/*.sql chạy CHỈ LẦN ĐẦU (khi oradata trống)
       - ./scripts/startup:/opt/oracle/scripts/startup
       - ./scripts/setup:/opt/oracle/scripts/setup
     healthcheck:
-      test: ["CMD", "sqlplus", "-L", "sys/Oracle123@//localhost:1521/THUVIEN_PDB as sysdba", "@/opt/oracle/checkDBStatus.sql"]
+      test: [ "CMD", "sqlplus", "-L", "sys/Oracle123@//localhost:1521/FREEPDB1 as sysdba", "@/opt/oracle/scripts/startup/checkDBStatus.sql" ]
       interval: 30s
       timeout: 10s
       retries: 10
       start_period: 300s
     restart: unless-stopped
+    networks:
+      - library-network
     deploy:
       resources:
         limits:
           memory: 4G
         reservations:
           memory: 2G
+
+  # ============================================
+  # FASTAPI BACKEND
+  # ============================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: library-backend
+    hostname: library-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_USER=library
+      - DB_PASSWORD=Library123
+      - DB_HOST=oracle-db
+      - DB_PORT=1521
+      - DB_SERVICE=FREEPDB1
+      - APP_NAME=Library User Management API
+      - APP_VERSION=1.0.0
+      - DEBUG=true
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - library-network
+
+  # ============================================
+  # NEXT.JS FRONTEND
+  # ============================================
+  frontend:
+    build:
+      context: ../client
+      dockerfile: Dockerfile
+    container_name: library-frontend
+    hostname: library-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NODE_ENV=production
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - library-network
+
+networks:
+  library-network:
+    driver: bridge
 
 volumes:
   oracle_data:
