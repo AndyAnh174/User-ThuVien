@@ -73,6 +73,9 @@ ALTER SESSION SET CONTAINER = FREEPDB1;
 -- Grant object privileges (sau khi tables đã tạo)
 @/opt/oracle/scripts/setup/01_1_grant_object_privs.sql
 
+-- Setup VPD (Virtual Private Database)
+@/opt/oracle/scripts/setup/03_setup_vpd.sql
+
 -- Setup Unified Auditing
 @/opt/oracle/scripts/setup/04_setup_audit.sql
 
@@ -200,17 +203,30 @@ Truy cập: http://localhost:3000
 
 ## VI. TÀI KHOẢN MẪU
 
-| Username | Password | Role | Mức truy cập |
-|----------|----------|------|--------------|
-| admin_user | Admin123 | ADMIN | TOP_SECRET (thấy tất cả) |
-| librarian_user | Librarian123 | LIBRARIAN | CONFIDENTIAL |
-| staff_user | Staff123 | STAFF | INTERNAL |
-| reader_user | Reader123 | READER | PUBLIC |
+| Username | Password | Role | Chi nhánh | Mức truy cập (OLS) |
+|----------|----------|------|-----------|---------------------|
+| admin_user | Admin123 | ADMIN | Trụ sở chính (HQ) | TOP_SECRET (thấy tất cả) |
+| librarian_user | Librarian123 | LIBRARIAN | Chi nhánh A | CONFIDENTIAL |
+| staff_user | Staff123 | STAFF | Chi nhánh A | INTERNAL |
+| reader_user | Reader123 | READER | Chi nhánh A | PUBLIC |
 
 ---
 
-## VII. KIỂM TRA OLS HOẠT ĐỘNG ĐÚNG
+## VII. KIỂM TRA VPD HOẠT ĐỘNG ĐÚNG
 
+### Logic VPD theo chi nhánh:
+| Role | Logic | Sách thấy |
+|------|-------|----------|
+| **Admin** | Thấy tất cả chi nhánh | 12 sách |
+| **Librarian** | Chi nhánh mình + HQ | 8 sách |
+| **Staff** | Chỉ chi nhánh mình | 3 sách |
+| **Reader** | Tất cả (OLS filter) | 6 sách PUBLIC |
+
+---
+
+## VIII. KIỂM TRA OLS HOẠT ĐỘNG ĐÚNG
+
+### OLS filter theo sensitivity level:
 | User | Sách phải thấy |
 |------|----------------|
 | READER | Chỉ sách PUBLIC |
@@ -220,7 +236,7 @@ Truy cập: http://localhost:3000
 
 ---
 
-## VIII. XỬ LÝ LỖI THƯỜNG GẶP
+## IX. XỬ LÝ LỖI THƯỜNG GẶP
 
 ### Lỗi ORA-01017: invalid credential
 
@@ -295,7 +311,7 @@ GRANT SELECT ON dba_users TO library;
 
 ---
 
-## IX. DATABASE VAULT (ODV) - BẢO VỆ KHỎI DBA
+## X. DATABASE VAULT (ODV) - BẢO VỆ KHỎi DBA
 
 > ⚠️ **Yêu cầu:** Oracle Enterprise Edition với Database Vault license.
 
@@ -361,4 +377,4 @@ SELECT COUNT(*) FROM library.books;
 
 ---
 
-*Cập nhật: 30/12/2024*
+*Cập nhật: 31/12/2024*

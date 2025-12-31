@@ -1,14 +1,15 @@
 -- ============================================
 -- SCRIPT 03: THIẾT LẬP VPD (Virtual Private Database)
--- Chạy với user LIB_PROJECT
+-- Chạy với SYS hoặc user có quyền DBMS_RLS
 -- ============================================
 
--- Kết nối: CONN lib_project/LibProject#123@THUVIEN_PDB
+-- Chuyển sang PDB
+ALTER SESSION SET CONTAINER = FREEPDB1;
 
 -- ============================================
 -- 1. POLICY FUNCTION: Reader chỉ thấy lịch sử mượn của mình
 -- ============================================
-CREATE OR REPLACE FUNCTION vpd_borrow_history_policy (
+CREATE OR REPLACE FUNCTION library.vpd_borrow_history_policy (
     p_schema IN VARCHAR2,
     p_table IN VARCHAR2
 ) RETURN VARCHAR2 AS
@@ -53,7 +54,7 @@ END;
 -- ============================================
 -- 2. POLICY FUNCTION: Staff chỉ thấy user cùng chi nhánh
 -- ============================================
-CREATE OR REPLACE FUNCTION vpd_user_info_policy (
+CREATE OR REPLACE FUNCTION library.vpd_user_info_policy (
     p_schema IN VARCHAR2,
     p_table IN VARCHAR2
 ) RETURN VARCHAR2 AS
@@ -95,92 +96,101 @@ END;
 /
 
 -- ============================================
--- 3. POLICY FUNCTION: Sách theo mức độ nhạy cảm
+-- 3. POLICY FUNCTION: Sách theo chi nhánh (VPD)
+-- OLS sẽ xử lý phần sensitivity level
 -- ============================================
-CREATE OR REPLACE FUNCTION vpd_books_policy (
+CREATE OR REPLACE FUNCTION library.vpd_books_policy (
     p_schema IN VARCHAR2,
     p_table IN VARCHAR2
 ) RETURN VARCHAR2 AS
     v_user VARCHAR2(50) := SYS_CONTEXT('USERENV', 'SESSION_USER');
     v_user_type VARCHAR2(20);
-    v_sensitivity VARCHAR2(20);
+    v_branch_id NUMBER;
 BEGIN
     -- Bỏ qua policy cho các user quản trị
     IF v_user IN ('SYS', 'SYSTEM', 'LIB_PROJECT', 'LIB_ADMIN', 'LIBRARY') THEN
         RETURN NULL;
     END IF;
     
-    -- Kiểm tra loại user và mức độ nhạy cảm
+    -- Kiểm tra loại user và chi nhánh
     BEGIN
-        SELECT user_type, sensitivity_level INTO v_user_type, v_sensitivity
+        SELECT user_type, branch_id 
+        INTO v_user_type, v_branch_id
         FROM library.user_info
         WHERE UPPER(oracle_username) = UPPER(v_user);
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
-            RETURN 'sensitivity_level = ''PUBLIC'''; -- Chỉ thấy sách công khai
+            RETURN '1=0'; -- Không tìm thấy user -> không thấy gì
     END;
     
-    -- Xác định sách được phép xem dựa trên sensitivity level
-    IF v_sensitivity = 'TOP_SECRET' THEN
-        RETURN NULL; -- Thấy hết
-    ELSIF v_sensitivity = 'CONFIDENTIAL' THEN
-        RETURN 'sensitivity_level IN (''PUBLIC'', ''INTERNAL'', ''CONFIDENTIAL'')';
-    ELSIF v_sensitivity = 'INTERNAL' THEN
-        RETURN 'sensitivity_level IN (''PUBLIC'', ''INTERNAL'')';
-    ELSE
-        RETURN 'sensitivity_level = ''PUBLIC'''; -- PUBLIC chỉ thấy sách PUBLIC
+    -- ADMIN: Thấy tất cả
+    IF v_user_type = 'ADMIN' THEN
+        RETURN NULL;
     END IF;
+    
+    -- LIBRARIAN: Thấy sách của chi nhánh mình + Trụ sở chính (branch_id = 1)
+    IF v_user_type = 'LIBRARIAN' THEN
+        IF v_branch_id IS NULL THEN
+            RETURN 'branch_id = 1'; -- Chỉ thấy HQ
+        ELSIF v_branch_id = 1 THEN
+            RETURN NULL; -- Nếu ở HQ thì thấy tất cả
+        ELSE
+            RETURN 'branch_id IN (1, ' || v_branch_id || ')';
+        END IF;
+    END IF;
+    
+    -- STAFF: Chỉ thấy sách của chi nhánh mình
+    IF v_user_type = 'STAFF' THEN
+        IF v_branch_id IS NULL THEN
+            RETURN '1=0'; -- Không có chi nhánh -> không thấy gì
+        ELSE
+            RETURN 'branch_id = ' || v_branch_id;
+        END IF;
+    END IF;
+    
+    -- READER: Thấy tất cả sách (OLS sẽ filter theo sensitivity)
+    IF v_user_type = 'READER' THEN
+        RETURN NULL;
+    END IF;
+    
+    -- Mặc định: không thấy gì
+    RETURN '1=0';
 END;
 /
 
 -- ============================================
--- 4. GÁN CÁC POLICIES CHO BẢNG
+-- 4. GÁN POLICY CHO BẢNG BOOKS
 -- ============================================
 
--- Cần chạy với user có quyền EXECUTE ON DBMS_RLS
--- Thường là SYS hoặc user được cấp quyền
-
--- Policy cho BORROW_HISTORY
+-- Drop policy cũ nếu có
 BEGIN
-    DBMS_RLS.ADD_POLICY(
-        object_schema   => 'LIBRARY',
-        object_name     => 'BORROW_HISTORY',
-        policy_name     => 'VPD_BORROW_HISTORY',
-        function_schema => 'LIB_PROJECT',
-        policy_function => 'VPD_BORROW_HISTORY_POLICY',
-        statement_types => 'SELECT,UPDATE,DELETE',
-        update_check    => TRUE
-    );
+    DBMS_RLS.DROP_POLICY('LIBRARY', 'BOOKS', 'VPD_BOOKS_BRANCH');
+EXCEPTION WHEN OTHERS THEN NULL;
 END;
 /
 
--- Policy cho USER_INFO
 BEGIN
-    DBMS_RLS.ADD_POLICY(
-        object_schema   => 'LIBRARY',
-        object_name     => 'USER_INFO',
-        policy_name     => 'VPD_USER_INFO',
-        function_schema => 'LIB_PROJECT',
-        policy_function => 'VPD_USER_INFO_POLICY',
-        statement_types => 'SELECT,UPDATE,DELETE',
-        update_check    => TRUE
-    );
+    DBMS_RLS.DROP_POLICY('LIBRARY', 'BOOKS', 'VPD_BOOKS');
+EXCEPTION WHEN OTHERS THEN NULL;
 END;
 /
 
--- Policy cho BOOKS (theo sensitivity level - đây là VPD đơn giản, MAC sẽ dùng OLS)
+-- Policy cho BOOKS (theo chi nhánh)
 BEGIN
     DBMS_RLS.ADD_POLICY(
         object_schema   => 'LIBRARY',
         object_name     => 'BOOKS',
-        policy_name     => 'VPD_BOOKS',
-        function_schema => 'LIB_PROJECT',
+        policy_name     => 'VPD_BOOKS_BRANCH',
+        function_schema => 'LIBRARY',
         policy_function => 'VPD_BOOKS_POLICY',
         statement_types => 'SELECT',
         update_check    => FALSE
     );
 END;
 /
+
+-- NOTE: VPD cho USER_INFO và BORROW_HISTORY bị bỏ để tránh xung đột
+-- Nếu cần, có thể enable lại sau khi test kỹ
 
 -- ============================================
 -- 5. THIẾT LẬP FINE-GRAINED AUDITING (FGA)

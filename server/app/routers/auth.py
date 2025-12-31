@@ -60,10 +60,11 @@ async def login(request: LoginRequest):
     try:
         cursor = sys_conn.cursor()
         cursor.execute("""
-            SELECT user_id, oracle_username, full_name, user_type, 
-                   sensitivity_level, branch_id
-            FROM library.user_info
-            WHERE UPPER(oracle_username) = UPPER(:username)
+            SELECT u.user_id, u.oracle_username, u.full_name, u.user_type, 
+                   u.sensitivity_level, u.branch_id, b.branch_name
+            FROM library.user_info u
+            LEFT JOIN library.branches b ON u.branch_id = b.branch_id
+            WHERE UPPER(u.oracle_username) = UPPER(:username)
         """, {"username": request.username})
         row = cursor.fetchone()
         cursor.close()
@@ -77,7 +78,8 @@ async def login(request: LoginRequest):
                     "full_name": row[2],
                     "user_type": row[3],
                     "sensitivity_level": row[4],
-                    "branch_id": row[5]
+                    "branch_id": row[5],
+                    "branch_name": row[6]
                 }
             )
         else:

@@ -4,12 +4,12 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { logout } from '@/lib/api';
-import { 
-    LayoutDashboard, 
-    BookOpen, 
-    ArrowLeftRight, 
-    Users, 
-    Shield, 
+import {
+    LayoutDashboard,
+    BookOpen,
+    ArrowLeftRight,
+    Users,
+    Shield,
     FileText,
     LogOut
 } from 'lucide-react';
@@ -64,16 +64,15 @@ export default function DashboardLayout({
 
                 <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
                     {navigation.map((item) => {
-                         const isActive = pathname === item.href;
-                         return (
+                        const isActive = pathname === item.href;
+                        return (
                             <Link
                                 key={item.name}
                                 href={item.href}
-                                className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                                    isActive
-                                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
-                                        : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700/50'
-                                }`}
+                                className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${isActive
+                                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+                                    : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700/50'
+                                    }`}
                             >
                                 <item.icon className="mr-3 h-5 w-5" />
                                 {item.name}
@@ -88,11 +87,11 @@ export default function DashboardLayout({
                             {user.username?.substring(0, 2).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                             <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                                 {user.full_name || user.username}
                             </p>
                             <p className="text-xs text-gray-500 dark:text-gray-400 truncate uppercase">
-                                {user.user_type}
+                                {user.user_type} • {user.branch_name || `CN ${user.branch_id}`}
                             </p>
                         </div>
                     </div>
@@ -107,17 +106,26 @@ export default function DashboardLayout({
             </aside>
 
             <main className="flex-1 overflow-auto">
-                 <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-8">
-                     <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-8">
+                    <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
                         {navigation.find(n => n.href === pathname)?.name || 'Dashboard'}
-                     </h1>
-                     <div className="text-sm text-gray-500">
-                        Oracle Database 23ai
-                     </div>
-                 </header>
-                 <div className="p-8">
+                    </h1>
+                    <div className="flex items-center gap-4">
+                        <span className={`px-2 py-1 text-xs font-bold rounded-full ${user.sensitivity_level === 'TOP_SECRET' ? 'bg-red-100 text-red-800' :
+                                user.sensitivity_level === 'CONFIDENTIAL' ? 'bg-yellow-100 text-yellow-800' :
+                                    user.sensitivity_level === 'INTERNAL' ? 'bg-blue-100 text-blue-800' :
+                                        'bg-green-100 text-green-800'
+                            }`}>
+                            OLS: {user.sensitivity_level || 'PUBLIC'}
+                        </span>
+                        <span className="text-sm text-gray-500">
+                            {user.branch_name || `Chi nhánh ${user.branch_id}`}
+                        </span>
+                    </div>
+                </header>
+                <div className="p-8">
                     {children}
-                 </div>
+                </div>
             </main>
         </div>
     );

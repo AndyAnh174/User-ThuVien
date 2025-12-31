@@ -15,11 +15,12 @@ class UserRepository:
         """Get all users from user_info table (filtered by VPD)"""
         cursor = connection.cursor()
         cursor.execute("""
-            SELECT user_id, oracle_username, full_name, email, phone, address,
-                   department, branch_id, user_type, sensitivity_level,
-                   created_at, updated_at
-            FROM library.user_info
-            ORDER BY user_id
+            SELECT u.user_id, u.oracle_username, u.full_name, u.email, u.phone, u.address,
+                   u.department, u.branch_id, b.branch_name, u.user_type, u.sensitivity_level,
+                   u.created_at, u.updated_at
+            FROM library.user_info u
+            LEFT JOIN library.branches b ON u.branch_id = b.branch_id
+            ORDER BY u.user_id
         """)
         columns = [col[0].lower() for col in cursor.description]
         rows = cursor.fetchall()

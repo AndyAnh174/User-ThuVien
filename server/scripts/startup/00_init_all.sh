@@ -77,6 +77,7 @@ echo "============================================"
 # Chạy các scripts trong PDB
 run_sql_file "$SYS_CONN" "$SETUP_DIR/01_create_users.sql" "PDB"
 run_sql_file "$SYS_CONN" "$SETUP_DIR/02_create_tables.sql" "PDB"
+run_sql_file "$SYS_CONN" "$SETUP_DIR/03_setup_vpd.sql" "PDB"
 
 echo ""
 echo "============================================"

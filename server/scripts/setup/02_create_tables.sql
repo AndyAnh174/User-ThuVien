@@ -51,9 +51,9 @@ CREATE TABLE branches (
 );
 
 -- Dữ liệu mẫu
-INSERT INTO branches (branch_code, branch_name, address) VALUES ('HQ', 'Tru so chinh', 'Quan 1, TP.HCM');
-INSERT INTO branches (branch_code, branch_name, address) VALUES ('BR_A', 'Chi nhanh A', 'Quan 3, TP.HCM');
-INSERT INTO branches (branch_code, branch_name, address) VALUES ('BR_B', 'Chi nhanh B', 'Quan 7, TP.HCM');
+INSERT INTO branches (branch_code, branch_name, address) VALUES ('HQ', 'Tru so chinh (HQ)', 'Quan 1, TP.HCM');
+INSERT INTO branches (branch_code, branch_name, address) VALUES ('BR_A', 'Chi nhanh A (Q3)', 'Quan 3, TP.HCM');
+INSERT INTO branches (branch_code, branch_name, address) VALUES ('BR_B', 'Chi nhanh B (Q7)', 'Quan 7, TP.HCM');
 
 -- ============================================
 -- 2. BẢNG THÔNG TIN NGƯỜI DÙNG
@@ -78,15 +78,19 @@ CREATE INDEX idx_user_info_branch ON user_info(branch_id);
 CREATE INDEX idx_user_info_type ON user_info(user_type);
 
 -- Dữ liệu mẫu
+-- Admin ở Trụ sở chính (branch 1)
 INSERT INTO user_info (oracle_username, full_name, email, department, branch_id, user_type, sensitivity_level)
 VALUES ('ADMIN_USER', 'Quan tri vien', 'admin@thuvien.vn', 'IT', 1, 'ADMIN', 'TOP_SECRET');
 
+-- Librarian ở Chi nhánh A (branch 2) - sẽ thấy cả HQ + Chi nhánh A
 INSERT INTO user_info (oracle_username, full_name, email, department, branch_id, user_type, sensitivity_level)
-VALUES ('LIBRARIAN_USER', 'Nguyen Van Thu', 'thuthu@thuvien.vn', 'LIBRARY', 1, 'LIBRARIAN', 'CONFIDENTIAL');
+VALUES ('LIBRARIAN_USER', 'Nguyen Van Thu', 'thuthu@thuvien.vn', 'LIBRARY', 2, 'LIBRARIAN', 'CONFIDENTIAL');
 
+-- Staff ở Chi nhánh A (branch 2) - chỉ thấy Chi nhánh A
 INSERT INTO user_info (oracle_username, full_name, email, department, branch_id, user_type, sensitivity_level)
 VALUES ('STAFF_USER', 'Tran Thi Nhan', 'nhanvien@thuvien.vn', 'LIBRARY', 2, 'STAFF', 'INTERNAL');
 
+-- Reader ở Chi nhánh A (branch 2) - thấy tất cả nhưng OLS filter sensitivity
 INSERT INTO user_info (oracle_username, full_name, email, department, branch_id, user_type, sensitivity_level)
 VALUES ('READER_USER', 'Le Van Doc', 'docgia@gmail.com', NULL, 2, 'READER', 'PUBLIC');
 
@@ -132,7 +136,7 @@ CREATE INDEX idx_books_branch ON books(branch_id);
 CREATE INDEX idx_books_category ON books(category_id);
 CREATE INDEX idx_books_sensitivity ON books(sensitivity_level);
 
--- Dữ liệu mẫu
+-- Dữ liệu mẫu - Chi nhánh 1 (HQ)
 INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, branch_id, quantity, available_qty, sensitivity_level)
 VALUES ('978-604-1', 'Lap trinh Python', 'Nguyen Van A', 'NXB Giao duc', 2023, 3, 1, 5, 5, 'PUBLIC');
 
@@ -140,13 +144,36 @@ INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, br
 VALUES ('978-604-2', 'Co so du lieu Oracle', 'Tran Van B', 'NXB KHKT', 2022, 3, 1, 3, 3, 'PUBLIC');
 
 INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, branch_id, quantity, available_qty, sensitivity_level)
-VALUES ('978-604-3', 'Bao mat he thong', 'Le Van C', 'NXB DHQG', 2024, 3, 2, 2, 2, 'INTERNAL');
-
-INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, branch_id, quantity, available_qty, sensitivity_level)
 VALUES ('978-604-4', 'Nghien cuu AI', 'Pham Van D', 'Noi bo', 2024, 4, 1, 1, 1, 'CONFIDENTIAL');
 
 INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, branch_id, quantity, available_qty, sensitivity_level)
 VALUES ('978-604-5', 'Tai lieu mat', 'Ban lanh dao', 'Noi bo', 2024, 5, 1, 1, 1, 'TOP_SECRET');
+
+INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, branch_id, quantity, available_qty, sensitivity_level)
+VALUES ('978-604-11', 'Thuat toan nang cao', 'Tran Minh', 'NXB DHQG', 2023, 3, 1, 2, 2, 'INTERNAL');
+
+-- Dữ liệu mẫu - Chi nhánh 2 (BR_A)
+INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, branch_id, quantity, available_qty, sensitivity_level)
+VALUES ('978-604-3', 'Bao mat he thong', 'Le Van C', 'NXB DHQG', 2024, 3, 2, 2, 2, 'INTERNAL');
+
+INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, branch_id, quantity, available_qty, sensitivity_level)
+VALUES ('978-604-6', 'Machine Learning co ban', 'Hoang Van E', 'NXB KHKT', 2023, 3, 2, 4, 4, 'PUBLIC');
+
+INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, branch_id, quantity, available_qty, sensitivity_level)
+VALUES ('978-604-7', 'Deep Learning', 'Nguyen Thi F', 'NXB DHBK', 2024, 3, 2, 3, 3, 'PUBLIC');
+
+INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, branch_id, quantity, available_qty, sensitivity_level)
+VALUES ('978-604-8', 'Bao cao noi bo CN2', 'Ban GD CN2', 'Noi bo', 2024, 4, 2, 1, 1, 'CONFIDENTIAL');
+
+-- Dữ liệu mẫu - Chi nhánh 3 (BR_B)
+INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, branch_id, quantity, available_qty, sensitivity_level)
+VALUES ('978-604-9', 'Tieu thuyet A', 'Nha van G', 'NXB Van hoc', 2022, 1, 3, 10, 10, 'PUBLIC');
+
+INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, branch_id, quantity, available_qty, sensitivity_level)
+VALUES ('978-604-10', 'Lich su Viet Nam', 'GS Nguyen H', 'NXB KHXH', 2021, 2, 3, 5, 5, 'PUBLIC');
+
+INSERT INTO books (isbn, title, author, publisher, publish_year, category_id, branch_id, quantity, available_qty, sensitivity_level)
+VALUES ('978-604-12', 'Du lieu noi bo CN3', 'Ban GD CN3', 'Noi bo', 2024, 4, 3, 1, 1, 'INTERNAL');
 
 -- ============================================
 -- 5. BẢNG LỊCH SỬ MƯỢN SÁCH

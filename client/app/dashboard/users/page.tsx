@@ -12,16 +12,23 @@ interface User {
     user_type: string;
     sensitivity_level: string;
     branch_id: number;
+    branch_name?: string;
     email?: string;
     phone?: string;
     address?: string;
     department?: string;
 }
 
+interface Branch {
+    branch_id: number;
+    branch_name: string;
+}
+
 export default function UsersPage() {
     const { showToast } = useToast();
     const [users, setUsers] = useState<User[]>([]);
-    const [profiles, setProfiles] = useState<{profile_name: string}[]>([]);
+    const [profiles, setProfiles] = useState<{ profile_name: string }[]>([]);
+    const [branches, setBranches] = useState<Branch[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -50,15 +57,25 @@ export default function UsersPage() {
     useEffect(() => {
         loadUsers();
         loadProfiles();
+        loadBranches();
         // Get current user role
         const userStr = localStorage.getItem('user');
         if (userStr) {
             try {
                 const u = JSON.parse(userStr);
                 setCurrentUserRole(u.user_type);
-            } catch (e) {}
+            } catch (e) { }
         }
     }, []);
+
+    const loadBranches = async () => {
+        try {
+            const data = await apiRequest('/books/branches');
+            setBranches(data);
+        } catch (err) {
+            console.error("Failed to load branches", err);
+        }
+    };
 
     const loadProfiles = async () => {
         try {
@@ -75,7 +92,7 @@ export default function UsersPage() {
             const data = await apiRequest('/users');
             setUsers(data);
         } catch (err: any) {
-             if (err.message.includes('403') || err.message.includes('ORA-00942')) {
+            if (err.message.includes('403') || err.message.includes('ORA-00942')) {
                 setError('Bạn không có quyền xem danh sách người dùng.');
             } else {
                 setError(err.message);
@@ -114,7 +131,7 @@ export default function UsersPage() {
         e.preventDefault();
         setSubmitting(true);
         setError('');
-        
+
         try {
             const payload = {
                 username: newUser.username,
@@ -176,7 +193,7 @@ export default function UsersPage() {
                 department: editingUser.department,
                 profile: editingUser.profile || undefined
             };
-            
+
             await apiRequest(`/users/${editingUser.user_id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -206,7 +223,7 @@ export default function UsersPage() {
             await loadUsers();
             showToast(`Đã xóa người dùng ${username}`, 'success');
         } catch (err: any) {
-             showToast('Lỗi khi xóa: ' + err.message, 'error');
+            showToast('Lỗi khi xóa: ' + err.message, 'error');
         }
     };
 
@@ -224,9 +241,9 @@ export default function UsersPage() {
 
     return (
         <div className="space-y-6">
-             <header className="flex justify-between items-center">
+            <header className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold tracking-tight">Quản lý Người dùng</h2>
-                <button 
+                <button
                     onClick={() => setIsCreateModalOpen(true)}
                     className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
@@ -239,13 +256,13 @@ export default function UsersPage() {
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead className="bg-gray-50 dark:bg-gray-700/50">
                         <tr>
-                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Mã</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Mã</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tài khoản</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Họ và Tên</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Vai trò</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Độ mật (OLS)</th>
-                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Chi nhánh</th>
-                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Thao tác</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Chi nhánh</th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -260,20 +277,20 @@ export default function UsersPage() {
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {user.sensitivity_level === 'TOP_SECRET' ? 'TỐI MẬT' : 
-                                     user.sensitivity_level === 'CONFIDENTIAL' ? 'MẬT' :
-                                     user.sensitivity_level === 'INTERNAL' ? 'NỘI BỘ' : 'CÔNG KHAI'}
+                                    {user.sensitivity_level === 'TOP_SECRET' ? 'TỐI MẬT' :
+                                        user.sensitivity_level === 'CONFIDENTIAL' ? 'MẬT' :
+                                            user.sensitivity_level === 'INTERNAL' ? 'NỘI BỘ' : 'CÔNG KHAI'}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.branch_id}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.branch_name || branches.find(b => b.branch_id === user.branch_id)?.branch_name || `CN ${user.branch_id}`}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex justify-end gap-2">
-                                    <button 
+                                    <button
                                         onClick={() => openEditModal(user)}
                                         className="text-blue-600 hover:text-blue-900 p-1 hover:bg-blue-50 rounded"
                                         title="Sửa thông tin"
                                     >
                                         <Pencil size={16} />
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={() => handleDeleteUser(user.user_id, user.oracle_username)}
                                         className="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded"
                                         title="Xóa người dùng"
@@ -297,94 +314,94 @@ export default function UsersPage() {
                                 <X size={20} />
                             </button>
                         </div>
-                        
+
                         <form onSubmit={handleCreateUser} className="p-6 space-y-4">
                             {/* ... Fields (Create users fields) ... */}
-                             <div>
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tài khoản (Username)</label>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     required
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                     placeholder="VD: nv_a"
                                     value={newUser.username}
-                                    onChange={e => setNewUser({...newUser, username: e.target.value.toUpperCase()})}
+                                    onChange={e => setNewUser({ ...newUser, username: e.target.value.toUpperCase() })}
                                 />
                                 <p className="text-xs text-gray-500 mt-1">Sẽ tự động viết hoa (Oracle standard)</p>
                             </div>
-                            
+
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mật khẩu</label>
-                                <input 
-                                    type="password" 
+                                <input
+                                    type="password"
                                     required
                                     minLength={6}
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                     value={newUser.password}
-                                    onChange={e => setNewUser({...newUser, password: e.target.value})}
+                                    onChange={e => setNewUser({ ...newUser, password: e.target.value })}
                                 />
                             </div>
-                            
-                             <div>
+
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Họ và Tên</label>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     required
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                     value={newUser.full_name}
-                                    onChange={e => setNewUser({...newUser, full_name: e.target.value})}
+                                    onChange={e => setNewUser({ ...newUser, full_name: e.target.value })}
                                 />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-                                    <input 
-                                        type="email" 
+                                    <input
+                                        type="email"
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                         value={newUser.email}
-                                        onChange={e => setNewUser({...newUser, email: e.target.value})}
+                                        onChange={e => setNewUser({ ...newUser, email: e.target.value })}
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Điện thoại</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                         value={newUser.phone}
-                                        onChange={e => setNewUser({...newUser, phone: e.target.value})}
+                                        onChange={e => setNewUser({ ...newUser, phone: e.target.value })}
                                     />
                                 </div>
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                         value={newUser.address}
-                                        onChange={e => setNewUser({...newUser, address: e.target.value})}
+                                        onChange={e => setNewUser({ ...newUser, address: e.target.value })}
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phòng ban</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                         value={newUser.department}
-                                        onChange={e => setNewUser({...newUser, department: e.target.value})}
+                                        onChange={e => setNewUser({ ...newUser, department: e.target.value })}
                                     />
                                 </div>
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vai trò</label>
-                                    <select 
+                                    <select
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                         value={newUser.user_type}
-                                        onChange={e => setNewUser({...newUser, user_type: e.target.value})}
+                                        onChange={e => setNewUser({ ...newUser, user_type: e.target.value })}
                                     >
                                         <option value="READER">Độc giả</option>
                                         <option value="STAFF">Nhân viên</option>
@@ -392,16 +409,17 @@ export default function UsersPage() {
                                         <option value="ADMIN">Quản trị viên</option>
                                     </select>
                                 </div>
-                                
+
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Chi nhánh</label>
-                                    <select 
+                                    <select
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                         value={newUser.branch_id}
-                                        onChange={e => setNewUser({...newUser, branch_id: Number(e.target.value)})}
+                                        onChange={e => setNewUser({ ...newUser, branch_id: Number(e.target.value) })}
                                     >
-                                        <option value="1">Chi nhánh 1 (HQ)</option>
-                                        <option value="2">Chi nhánh 2</option>
+                                        {branches.map(b => (
+                                            <option key={b.branch_id} value={b.branch_id}>{b.branch_name}</option>
+                                        ))}
                                     </select>
                                 </div>
                             </div>
@@ -409,10 +427,10 @@ export default function UsersPage() {
                             {currentUserRole === 'ADMIN' && (
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Oracle Profile (Admin Only)</label>
-                                    <select 
+                                    <select
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                         value={newUser.profile}
-                                        onChange={e => setNewUser({...newUser, profile: e.target.value})}
+                                        onChange={e => setNewUser({ ...newUser, profile: e.target.value })}
                                     >
                                         {profiles.map(p => (
                                             <option key={p.profile_name} value={p.profile_name}>{p.profile_name}</option>
@@ -422,14 +440,14 @@ export default function UsersPage() {
                             )}
 
                             <div className="pt-4 flex justify-end gap-3">
-                                <button 
+                                <button
                                     type="button"
                                     onClick={() => setIsCreateModalOpen(false)}
                                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
                                 >
                                     Hủy
                                 </button>
-                                <button 
+                                <button
                                     type="submit"
                                     disabled={submitting}
                                     className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
@@ -452,80 +470,81 @@ export default function UsersPage() {
                                 <X size={20} />
                             </button>
                         </div>
-                        
+
                         <form onSubmit={handleUpdateUser} className="p-6 space-y-4">
-                             <div>
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Họ và Tên</label>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     required
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                     value={editingUser.full_name}
-                                    onChange={e => setEditingUser({...editingUser, full_name: e.target.value})}
+                                    onChange={e => setEditingUser({ ...editingUser, full_name: e.target.value })}
                                 />
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-                                    <input 
-                                        type="email" 
+                                    <input
+                                        type="email"
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                         value={editingUser.email || ''}
-                                        onChange={e => setEditingUser({...editingUser, email: e.target.value})}
+                                        onChange={e => setEditingUser({ ...editingUser, email: e.target.value })}
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Điện thoại</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                         value={editingUser.phone || ''}
-                                        onChange={e => setEditingUser({...editingUser, phone: e.target.value})}
+                                        onChange={e => setEditingUser({ ...editingUser, phone: e.target.value })}
                                     />
                                 </div>
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                         value={editingUser.address || ''}
-                                        onChange={e => setEditingUser({...editingUser, address: e.target.value})}
+                                        onChange={e => setEditingUser({ ...editingUser, address: e.target.value })}
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phòng ban</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                         value={editingUser.department || ''}
-                                        onChange={e => setEditingUser({...editingUser, department: e.target.value})}
+                                        onChange={e => setEditingUser({ ...editingUser, department: e.target.value })}
                                     />
                                 </div>
                             </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Chi nhánh</label>
-                                <select 
+                                <select
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                     value={editingUser.branch_id}
-                                    onChange={e => setEditingUser({...editingUser, branch_id: Number(e.target.value)})}
+                                    onChange={e => setEditingUser({ ...editingUser, branch_id: Number(e.target.value) })}
                                 >
-                                    <option value="1">Chi nhánh 1 (HQ)</option>
-                                    <option value="2">Chi nhánh 2</option>
+                                    {branches.map(b => (
+                                        <option key={b.branch_id} value={b.branch_id}>{b.branch_name}</option>
+                                    ))}
                                 </select>
                             </div>
 
                             {currentUserRole === 'ADMIN' && (
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Oracle Profile (Admin Only)</label>
-                                    <select 
+                                    <select
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600"
                                         value={editingUser.profile || ''}
-                                        onChange={e => setEditingUser({...editingUser, profile: e.target.value})}
+                                        onChange={e => setEditingUser({ ...editingUser, profile: e.target.value })}
                                     >
                                         <option value="">-- Giữ nguyên --</option>
                                         {profiles.map(p => (
@@ -537,14 +556,14 @@ export default function UsersPage() {
                             )}
 
                             <div className="pt-4 flex justify-end gap-3">
-                                <button 
+                                <button
                                     type="button"
                                     onClick={() => setIsEditModalOpen(false)}
                                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
                                 >
                                     Hủy
                                 </button>
-                                <button 
+                                <button
                                     type="submit"
                                     disabled={submitting}
                                     className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
