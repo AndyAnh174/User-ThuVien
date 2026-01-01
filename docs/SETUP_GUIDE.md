@@ -70,8 +70,6 @@ ALTER SESSION SET CONTAINER = FREEPDB1;
 -- Tạo tables và sample data
 @/opt/oracle/scripts/setup/02_create_tables.sql
 
--- Grant object privileges (sau khi tables đã tạo)
-@/opt/oracle/scripts/setup/01_1_grant_object_privs.sql
 
 -- Setup VPD (Virtual Private Database)
 @/opt/oracle/scripts/setup/03_setup_vpd.sql
