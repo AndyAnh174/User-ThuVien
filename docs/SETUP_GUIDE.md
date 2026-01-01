@@ -309,7 +309,30 @@ GRANT SELECT ON dba_users TO library;
 
 ---
 
-## X. DATABASE VAULT (ODV) - BẢO VỆ KHỎi DBA
+### Lỗi "/bin/bash^M: bad interpreter" hoặc "$'\r': command not found"
+
+**Nguyên nhân:** File script shell (.sh) bị lưu dưới định dạng Windows (CRLF) thay vì Linux (LF).
+
+**Giải pháp:**
+1. Đảm bảo đã pull code mới nhất (có file `.gitattributes`).
+2. Chạy lệnh sau để git tự động sửa định dạng file:
+   ```bash
+   git rm --cached -r .
+   git reset --hard
+   ```
+3. Nếu dùng Docker trên Windows, hãy đảm bảo cấu hình git:
+   ```bash
+   git config --global core.autocrlf false
+   ```
+4. Sau đó xóa container và volume cũ để chạy lại:
+   ```bash
+   docker compose down -v
+   docker compose up -d
+   ```
+
+---
+
+## X. DATABASE VAULT (ODV) - BẢO VỆ KHỎI DBA
 
 > ⚠️ **Yêu cầu:** Oracle Enterprise Edition với Database Vault license.
 
