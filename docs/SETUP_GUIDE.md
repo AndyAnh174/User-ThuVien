@@ -361,7 +361,7 @@ docker logs oracle23ai --tail 30
 ### Bước 9.3: Tạo Realm bảo vệ Schema LIBRARY
 
 ```bash
-docker exec -it oracle23ai sqlplus dv_owner/DVOwner#123@localhost:1521/FREEPDB1
+docker exec -it oracle23ai sqlplus sec_admin/SecAdmin123@localhost:1521/FREEPDB1
 ```
 
 ```sql
@@ -393,8 +393,8 @@ SELECT COUNT(*) FROM library.books;
 
 | User | Password | Chức năng |
 |------|----------|-----------|
-| `dv_owner` | `DVOwner#123` | Quản lý Realms, Command Rules |
-| `dv_acctmgr` | `DVAcctMgr#123` | Quản lý tài khoản user |
+| `sec_admin` | `SecAdmin123` | Quản lý Realms, Command Rules (DV Owner) |
+| `dv_acctmgr_user` | `DVAcctMgr#123` | Quản lý tài khoản user |
 
 ---
 

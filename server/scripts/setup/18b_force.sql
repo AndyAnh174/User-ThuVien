@@ -1,0 +1,16 @@
+-- Force Enable DV in PDB
+-- Run as SEC_ADMIN
+
+SET SERVEROUTPUT ON;
+
+BEGIN
+    DVSYS.DBMS_MACADM.ENABLE_DV;
+    DBMS_OUTPUT.PUT_LINE('Enable Procedure Call Finished.');
+EXCEPTION 
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Enable Failed: ' || SQLERRM);
+END;
+/
+
+SELECT * FROM DBA_DV_STATUS;
+EXIT;

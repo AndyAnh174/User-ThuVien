@@ -1,15 +1,22 @@
 -- ============================================
 -- SCRIPT 18: ORACLE DATABASE VAULT (ODV)
--- Chạy với SYS AS SYSDBA
+-- Chạy với SYS AS SYSDBA trong PDB context
 -- ============================================
 -- Database Vault ngăn chặn privileged users (DBA) 
 -- truy cập dữ liệu nhạy cảm của ứng dụng
 -- ============================================
 
--- Chuyển sang PDB
-ALTER SESSION SET CONTAINER = FREEPDB1;
-
 SET SERVEROUTPUT ON;
+
+-- Chuyển sang PDB (if running from CDB)
+BEGIN
+    EXECUTE IMMEDIATE 'ALTER SESSION SET CONTAINER = FREEPDB1';
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Already in PDB or no permission, continue
+        NULL;
+END;
+/
 
 -- ============================================
 -- 1. KIỂM TRA DATABASE VAULT ĐÃ CÀI ĐẶT CHƯA
@@ -25,15 +32,17 @@ PROMPT Creating Database Vault users...
 
 -- DV Owner - quản lý realms và rules
 BEGIN
-    EXECUTE IMMEDIATE 'CREATE USER dv_owner IDENTIFIED BY "DVOwner#123" 
-        DEFAULT TABLESPACE library_data 
-        TEMPORARY TABLESPACE library_temp 
-        QUOTA 50M ON library_data';
-    DBMS_OUTPUT.PUT_LINE('User dv_owner created.');
+    EXECUTE IMMEDIATE 'CREATE USER sec_admin IDENTIFIED BY "SecAdmin123" 
+        DEFAULT TABLESPACE USERS 
+        QUOTA UNLIMITED ON USERS';
+    DBMS_OUTPUT.PUT_LINE('User sec_admin created.');
+    
+    -- Grant DV_OWNER role to sec_admin
+    EXECUTE IMMEDIATE 'GRANT DV_OWNER TO sec_admin WITH ADMIN OPTION';
 EXCEPTION
     WHEN OTHERS THEN
         IF SQLCODE = -1920 THEN
-            DBMS_OUTPUT.PUT_LINE('User dv_owner already exists. Skipping...');
+            DBMS_OUTPUT.PUT_LINE('User sec_admin already exists. Skipping...');
         ELSE
             RAISE;
         END IF;
@@ -42,55 +51,43 @@ END;
 
 -- DV Account Manager - quản lý users
 BEGIN
-    EXECUTE IMMEDIATE 'CREATE USER dv_acctmgr IDENTIFIED BY "DVAcctMgr#123" 
-        DEFAULT TABLESPACE library_data 
-        TEMPORARY TABLESPACE library_temp 
-        QUOTA 10M ON library_data';
-    DBMS_OUTPUT.PUT_LINE('User dv_acctmgr created.');
+    EXECUTE IMMEDIATE 'CREATE USER dv_acctmgr_user IDENTIFIED BY "DVAcctMgr#123" 
+        DEFAULT TABLESPACE USERS 
+        QUOTA UNLIMITED ON USERS';
+    DBMS_OUTPUT.PUT_LINE('User dv_acctmgr_user created.');
+
+    -- Grant DV_ACCTMGR role
+    EXECUTE IMMEDIATE 'GRANT DV_ACCTMGR TO dv_acctmgr_user WITH ADMIN OPTION';
 EXCEPTION
     WHEN OTHERS THEN
         IF SQLCODE = -1920 THEN
-            DBMS_OUTPUT.PUT_LINE('User dv_acctmgr already exists. Skipping...');
+            DBMS_OUTPUT.PUT_LINE('User dv_acctmgr_user already exists. Skipping...');
         ELSE
             RAISE;
         END IF;
 END;
 /
 
-GRANT CREATE SESSION TO dv_owner;
-GRANT CREATE SESSION TO dv_acctmgr;
+GRANT CREATE SESSION TO sec_admin;
+GRANT CREATE SESSION TO dv_acctmgr_user;
+
+-- Grant required privileges for package usage
+BEGIN
+    EXECUTE IMMEDIATE 'GRANT EXECUTE ON DVSYS.CONFIGURE_DV TO sec_admin';
+    EXECUTE IMMEDIATE 'GRANT EXECUTE ON DVSYS.DBMS_MACADM TO sec_admin';
+    EXECUTE IMMEDIATE 'GRANT EXECUTE ON DVSYS.DBMS_MACUTL TO sec_admin';
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Grant Warning: ' || SQLERRM);
+END;
+/
 
 -- ============================================
 -- 3. CẤU HÌNH DATABASE VAULT
 -- ============================================
-PROMPT Configuring Database Vault...
+-- DV Configuration and Enablement moved to 18b_enable_dv_pdb.sql
+-- to be run by C##SEC_ADMIN
 
-BEGIN
-    -- Configure Database Vault (chạy 1 lần)
-    DVSYS.CONFIGURE_DV(
-        dvowner_uname         => 'DV_OWNER',
-        dvacctmgr_uname       => 'DV_ACCTMGR'
-    );
-    DBMS_OUTPUT.PUT_LINE('Database Vault configured successfully.');
-EXCEPTION 
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('DV Config Error (may already be configured): ' || SQLERRM);
-END;
-/
-
--- ============================================
--- 4. ENABLE DATABASE VAULT
--- ============================================
-PROMPT Enabling Database Vault...
-
-BEGIN
-    DVSYS.DBMS_MACADM.ENABLE_DV;
-    DBMS_OUTPUT.PUT_LINE('Database Vault enabled. RESTART DATABASE REQUIRED!');
-EXCEPTION 
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('DV Enable Error: ' || SQLERRM);
-END;
-/
 
 -- ============================================
 -- NOTE: RESTART DATABASE SAU BƯỚC NÀY

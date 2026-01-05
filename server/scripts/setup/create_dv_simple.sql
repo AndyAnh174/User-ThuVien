@@ -1,0 +1,3 @@
+CREATE USER dv_owner IDENTIFIED BY DVOwner123;
+GRANT CREATE SESSION TO dv_owner;
+exit;
