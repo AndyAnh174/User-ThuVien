@@ -18,12 +18,13 @@ EXIT;
 $CDBDVStatus = $CheckCDBDVSql | docker exec -i $Container bash -c "sqlplus -s '$CDBSecAdmin'" 2>&1
 $CDBDVStatus | Write-Host
 
-if ($CDBDVStatus -notmatch "DV_ENABLE_STATUS.*TRUE") {
+if ($CDBDVStatus -match "DV_ENABLE_STATUS\s+TRUE") {
+    Write-Host "✅ CDB DV is enabled" -ForegroundColor Green
+} else {
     Write-Host "❌ CDB DV is not enabled. Cannot enable PDB DV." -ForegroundColor Red
+    Write-Host "CDB DV Status: $CDBDVStatus" -ForegroundColor Yellow
     Write-Host "Please enable CDB DV first." -ForegroundColor Yellow
     exit
-} else {
-    Write-Host "✅ CDB DV is enabled" -ForegroundColor Green
 }
 
 # Step 2: Check PDB DV Status
