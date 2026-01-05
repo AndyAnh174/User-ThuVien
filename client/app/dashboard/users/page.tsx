@@ -138,6 +138,7 @@ export default function UsersPage() {
                 password: newUser.password,
                 full_name: newUser.full_name,
                 user_type: newUser.user_type,
+                branch_id: newUser.branch_id,
                 default_tablespace: "LIBRARY_DATA",
                 temporary_tablespace: "LIBRARY_TEMP",
                 quota: "10M",

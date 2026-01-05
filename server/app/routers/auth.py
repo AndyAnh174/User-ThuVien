@@ -9,6 +9,7 @@ from typing import Optional
 from ..database import Database
 from ..models import LoginRequest, LoginResponse, CurrentUser
 from ..repositories import UserRepository
+from ..repositories.audit_helper import AuditHelper
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 security = HTTPBasic()
@@ -70,6 +71,14 @@ async def login(request: LoginRequest):
         cursor.close()
         
         if row:
+            # Log successful login
+            AuditHelper.log_action(
+                sys_conn,
+                action_type="LOGIN",
+                table_name="SYSTEM",
+                performed_by=request.username
+            )
+            
             return LoginResponse(
                 success=True,
                 user={

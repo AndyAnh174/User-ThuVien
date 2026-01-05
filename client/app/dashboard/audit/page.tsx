@@ -53,9 +53,7 @@ export default function AuditPage() {
         }
     };
 
-    const getActionColor = (action: string, returnCode: number) => {
-        if (returnCode !== 0) return 'text-red-600 bg-red-50 border-red-200'; // Failed action
-        
+    const getActionColor = (action: string) => {
         switch (action) {
             case 'DELETE':
             case 'DROP':
@@ -175,7 +173,6 @@ export default function AuditPage() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hành động</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Đối tượng</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kết quả</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chi tiết</th>
                             </tr>
                         </thead>
@@ -190,19 +187,12 @@ export default function AuditPage() {
                                             {log.username}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-bold rounded border ${getActionColor(log.action, log.return_code)}`}>
+                                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-bold rounded border ${getActionColor(log.action)}`}>
                                                 {log.action}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             {log.object_name || '-'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            {log.return_code === 0 ? (
-                                                <span className="text-green-600 flex items-center gap-1"><span className="w-2 h-2 bg-green-500 rounded-full"></span> Success</span>
-                                            ) : (
-                                                <span className="text-red-600 flex items-center gap-1" title={`Code: ${log.return_code}`}><span className="w-2 h-2 bg-red-500 rounded-full"></span> Fail ({log.return_code})</span>
-                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-xs text-gray-500 max-w-xs truncate">
                                             {log.sql_text ? (
@@ -215,7 +205,7 @@ export default function AuditPage() {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-10 text-center text-gray-500">
+                                    <td colSpan={5} className="px-6 py-10 text-center text-gray-500">
                                         Không tìm thấy nhật ký nào phù hợp.
                                     </td>
                                 </tr>

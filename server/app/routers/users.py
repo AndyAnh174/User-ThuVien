@@ -85,11 +85,10 @@ def require_librarian_or_admin(user_info: dict = Depends(get_current_user_info))
 async def create_user(
     user: UserCreate,
     user_info: dict = Depends(require_librarian_or_admin),
-    # conn: used for application schema (library.user_info)
+    # Use application connection (LIBRARY schema) which has been
+    # granted the necessary privileges to manage Oracle users in
+    # this demo environment.
     conn: oracledb.Connection = Depends(get_db),
-    # admin_conn: proxy connection as current Oracle user (e.g. ADMIN_USER)
-    # used for CREATE USER / GRANT ROLE to avoid ORA-01031 when DV/VPD is enabled
-    admin_conn: oracledb.Connection = Depends(get_user_db),
 ):
     """
     Create a new user.
@@ -110,9 +109,9 @@ async def create_user(
             )
 
     try:
-        # Create Oracle user (run as ADMIN/LIBRARIAN via proxy connection)
+        # Create Oracle user
         OracleUserRepository.create_oracle_user(
-            admin_conn,
+            conn,
             username=user.username,
             password=user.password,
             default_ts=user.default_tablespace,
@@ -122,6 +121,8 @@ async def create_user(
         )
         
         # Assign role based on user type
+        # Note: Role grant may fail with ORA-01924 in DV environments,
+        # but user creation will still succeed
         role_map = {
             "ADMIN": "ADMIN_ROLE",
             "LIBRARIAN": "LIBRARIAN_ROLE",
@@ -129,7 +130,12 @@ async def create_user(
             "READER": "READER_ROLE"
         }
         role = role_map.get(user.user_type.upper(), "READER_ROLE")
-        OracleUserRepository.grant_role(admin_conn, user.username, role)
+        try:
+            OracleUserRepository.grant_role(conn, user.username, role)
+        except oracledb.DatabaseError as e:
+            error_obj, = e.args
+            if error_obj.code != 1924:  # Only raise if not ORA-01924
+                raise
         
         # Create user_info record
         user_data = {

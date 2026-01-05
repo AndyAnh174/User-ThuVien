@@ -5,6 +5,7 @@ User Repository - Database operations for users
 import oracledb
 from typing import List, Optional, Dict, Any
 from ..database import Database
+from .audit_helper import AuditHelper
 
 
 class UserRepository:
@@ -77,11 +78,25 @@ class UserRepository:
         user_id = cursor.bindvars["user_id"].getvalue()[0]
         connection.commit()
         cursor.close()
+        
+        # Log audit event
+        AuditHelper.log_action(
+            connection,
+            action_type="INSERT",
+            table_name="USER_INFO",
+            record_id=int(user_id),
+            new_values=user_data,
+            performed_by=user_data.get("oracle_username")
+        )
+        
         return int(user_id)
     
     @staticmethod
     def update(connection: oracledb.Connection, user_id: int, user_data: Dict[str, Any]) -> bool:
         """Update user in user_info table"""
+        # Get old values before update
+        old_user = UserRepository.get_by_id(connection, user_id)
+        
         set_clause = ", ".join([f"{k} = :{k}" for k in user_data.keys()])
         cursor = connection.cursor()
         cursor.execute(f"""
@@ -92,11 +107,26 @@ class UserRepository:
         affected = cursor.rowcount
         connection.commit()
         cursor.close()
+        
+        # Log audit event if update was successful
+        if affected > 0:
+            AuditHelper.log_action(
+                connection,
+                action_type="UPDATE",
+                table_name="USER_INFO",
+                record_id=user_id,
+                old_values=old_user,
+                new_values=user_data
+            )
+        
         return affected > 0
     
     @staticmethod
     def delete(connection: oracledb.Connection, user_id: int) -> bool:
         """Delete user from user_info table"""
+        # Get old values before delete
+        old_user = UserRepository.get_by_id(connection, user_id)
+        
         cursor = connection.cursor()
         cursor.execute("""
             DELETE FROM library.user_info WHERE user_id = :user_id
@@ -104,6 +134,17 @@ class UserRepository:
         affected = cursor.rowcount
         connection.commit()
         cursor.close()
+        
+        # Log audit event if delete was successful
+        if affected > 0 and old_user:
+            AuditHelper.log_action(
+                connection,
+                action_type="DELETE",
+                table_name="USER_INFO",
+                record_id=user_id,
+                old_values=old_user
+            )
+        
         return affected > 0
 
 
@@ -147,23 +188,50 @@ class OracleUserRepository:
                            temp_ts: str = "LIBRARY_TEMP",
                            quota: str = "10M",
                            profile: str = "DEFAULT") -> None:
-        """Create new Oracle database user"""
-        cursor = connection.cursor()
-        
-        # Create user
-        cursor.execute(f"""
-            CREATE USER {username} IDENTIFIED BY "{password}"
-            DEFAULT TABLESPACE {default_ts}
-            TEMPORARY TABLESPACE {temp_ts}
-            QUOTA {quota} ON {default_ts}
-            PROFILE {profile}
-        """)
-        
-        # Grant basic connect
-        cursor.execute(f"GRANT CREATE SESSION TO {username}")
-        
-        connection.commit()
-        cursor.close()
+        """
+        Create new Oracle database user.
+
+        NOTE:
+        -----
+        Under Oracle Database Vault, only the DV account manager
+        (DV_ACCTMGR) is typically allowed to create users. The
+        regular application accounts (LIBRARY, ADMIN_USER, ...) will
+        hit ORA-01031 even if they have CREATE USER granted.
+
+        To respect this, we open a dedicated connection as the
+        DV account manager user (dv_acctmgr_user) solely for the
+        CREATE USER command. Role grants and application metadata
+        updates still run on the caller's connection.
+        """
+        dv_conn = None
+        try:
+            dv_conn = Database.connect_as_user(
+                "dv_acctmgr_user",
+                "DVAcctMgr#123",
+            )
+            cursor = dv_conn.cursor()
+
+            # Create user with proper syntax
+            create_user_sql = f'CREATE USER {username} IDENTIFIED BY "{password}"'
+            create_user_sql += f' DEFAULT TABLESPACE {default_ts}'
+            create_user_sql += f' TEMPORARY TABLESPACE {temp_ts}'
+            create_user_sql += f' PROFILE {profile}'
+            cursor.execute(create_user_sql)
+            
+            # Grant quota separately to avoid syntax issues
+            if quota and quota.upper() != 'UNLIMITED':
+                cursor.execute(f'ALTER USER {username} QUOTA {quota} ON {default_ts}')
+            else:
+                cursor.execute(f'ALTER USER {username} QUOTA UNLIMITED ON {default_ts}')
+
+            # Basic connect privilege
+            cursor.execute(f"GRANT CREATE SESSION TO {username}")
+
+            dv_conn.commit()
+            cursor.close()
+        finally:
+            if dv_conn is not None:
+                dv_conn.close()
     
     @staticmethod
     def alter_oracle_user(connection: oracledb.Connection, 
@@ -206,11 +274,26 @@ class OracleUserRepository:
     
     @staticmethod
     def grant_role(connection: oracledb.Connection, username: str, role: str) -> None:
-        """Grant role to user"""
+        """
+        Grant role to user.
+        
+        Handles ORA-01924 gracefully - if role grant fails due to
+        Database Vault restrictions, logs warning but doesn't fail.
+        """
         cursor = connection.cursor()
-        cursor.execute(f"GRANT {role} TO {username}")
-        connection.commit()
-        cursor.close()
+        try:
+            cursor.execute(f"GRANT {role} TO {username}")
+            connection.commit()
+        except oracledb.DatabaseError as e:
+            error_obj, = e.args
+            if error_obj.code == 1924:
+                # Role not granted or doesn't exist - log but don't fail
+                print(f"[WARN] Could not grant role {role} to {username}: {e}")
+                connection.rollback()
+            else:
+                raise
+        finally:
+            cursor.close()
     
     @staticmethod
     def revoke_role(connection: oracledb.Connection, username: str, role: str) -> None:

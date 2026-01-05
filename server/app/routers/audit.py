@@ -33,6 +33,8 @@ async def get_audit_trail(
     Optional filters: username, action, object_name.
     """
     try:
+        # Connection argument is ignored inside repository (uses SEC_ADMIN),
+        # but kept for FastAPI dependency wiring / future extension.
         return AuditRepository.get_audit_trail(conn, limit, username, action, object_name)
     except oracledb.DatabaseError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -4,6 +4,7 @@ Book Repository - Database operations for books
 
 import oracledb
 from typing import List, Dict, Any, Optional
+from .audit_helper import AuditHelper
 
 
 class BookRepository:
@@ -47,9 +48,14 @@ class BookRepository:
                 # no extra filter – full access
                 pass
             else:
-                # default: restrict to own branch if provided
+                # default: restrict by branch
                 if user_branch_id is not None:
-                    query += " AND b.branch_id = :user_branch_id"
+                    if role == "LIBRARIAN":
+                        # Librarian: own branch + HQ (branch_id = 1)
+                        query += " AND (b.branch_id = :user_branch_id OR b.branch_id = 1)"
+                    else:
+                        # Staff / Reader: only own branch
+                        query += " AND b.branch_id = :user_branch_id"
                     params["user_branch_id"] = user_branch_id
 
                 if role == "LIBRARIAN":
@@ -117,9 +123,13 @@ class BookRepository:
             if role == "ADMIN":
                 pass
             else:
-                # Always enforce own branch, ignore arbitrary branch filter
+                # Enforce branch based on role
                 if user_branch_id is not None:
-                    query += " AND b.branch_id = :user_branch_id"
+                    if role == "LIBRARIAN":
+                        # Own branch + HQ
+                        query += " AND (b.branch_id = :user_branch_id OR b.branch_id = 1)"
+                    else:
+                        query += " AND b.branch_id = :user_branch_id"
                     params["user_branch_id"] = user_branch_id
 
                 if role == "LIBRARIAN":
@@ -170,6 +180,16 @@ class BookRepository:
         book_id = cursor.bindvars["book_id"].getvalue()[0]
         connection.commit()
         cursor.close()
+        
+        # Log audit event
+        AuditHelper.log_action(
+            connection,
+            action_type="INSERT",
+            table_name="BOOKS",
+            record_id=int(book_id),
+            new_values=book_data
+        )
+        
         return int(book_id)
     
     @staticmethod
@@ -191,10 +211,24 @@ class BookRepository:
     def delete(connection: oracledb.Connection, book_id: int) -> bool:
         """Delete book"""
         cursor = connection.cursor()
+        # Get old values before delete
+        old_book = BookRepository.get_by_id(connection, book_id)
+        
         cursor.execute("DELETE FROM library.books WHERE book_id = :book_id", {"book_id": book_id})
         affected = cursor.rowcount
         connection.commit()
         cursor.close()
+        
+        # Log audit event if delete was successful
+        if affected > 0 and old_book:
+            AuditHelper.log_action(
+                connection,
+                action_type="DELETE",
+                table_name="BOOKS",
+                record_id=book_id,
+                old_values=old_book
+            )
+        
         return affected > 0
     
     @staticmethod
