@@ -85,7 +85,11 @@ def require_librarian_or_admin(user_info: dict = Depends(get_current_user_info))
 async def create_user(
     user: UserCreate,
     user_info: dict = Depends(require_librarian_or_admin),
-    conn: oracledb.Connection = Depends(get_db)
+    # conn: used for application schema (library.user_info)
+    conn: oracledb.Connection = Depends(get_db),
+    # admin_conn: proxy connection as current Oracle user (e.g. ADMIN_USER)
+    # used for CREATE USER / GRANT ROLE to avoid ORA-01031 when DV/VPD is enabled
+    admin_conn: oracledb.Connection = Depends(get_user_db),
 ):
     """
     Create a new user.
@@ -106,9 +110,9 @@ async def create_user(
             )
 
     try:
-        # Create Oracle user
+        # Create Oracle user (run as ADMIN/LIBRARIAN via proxy connection)
         OracleUserRepository.create_oracle_user(
-            conn,
+            admin_conn,
             username=user.username,
             password=user.password,
             default_ts=user.default_tablespace,
@@ -125,7 +129,7 @@ async def create_user(
             "READER": "READER_ROLE"
         }
         role = role_map.get(user.user_type.upper(), "READER_ROLE")
-        OracleUserRepository.grant_role(conn, user.username, role)
+        OracleUserRepository.grant_role(admin_conn, user.username, role)
         
         # Create user_info record
         user_data = {
@@ -258,7 +262,7 @@ async def delete_user(
 @router.get("/oracle/all")
 async def get_oracle_users(
     user_info: dict = Depends(require_admin_privilege),
-    conn: oracledb.Connection = Depends(get_db)
+    conn: oracledb.Connection = Depends(get_user_db)
 ):
     """Get all Oracle database users"""
     try:
@@ -271,7 +275,7 @@ async def get_oracle_users(
 async def lock_user(
     username: str,
     user_info: dict = Depends(require_admin_privilege),
-    conn: oracledb.Connection = Depends(get_db)
+    conn: oracledb.Connection = Depends(get_user_db)
 ):
     """Lock Oracle user account"""
     try:
@@ -285,7 +289,7 @@ async def lock_user(
 async def unlock_user(
     username: str,
     user_info: dict = Depends(require_admin_privilege),
-    conn: oracledb.Connection = Depends(get_db)
+    conn: oracledb.Connection = Depends(get_user_db)
 ):
     """Unlock Oracle user account"""
     try:
@@ -300,7 +304,7 @@ async def change_password(
     username: str,
     new_password: str,
     user_info: dict = Depends(require_admin_privilege),
-    conn: oracledb.Connection = Depends(get_db)
+    conn: oracledb.Connection = Depends(get_user_db)
 ):
     """Change Oracle user password"""
     try:
@@ -316,7 +320,7 @@ async def change_quota(
     quota: str,
     tablespace: str = "LIBRARY_DATA",
     user_info: dict = Depends(require_admin_privilege),
-    conn: oracledb.Connection = Depends(get_db)
+    conn: oracledb.Connection = Depends(get_user_db)
 ):
     """Change user quota on tablespace"""
     try:

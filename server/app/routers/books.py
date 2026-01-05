@@ -53,14 +53,29 @@ async def get_books(
 ):
     """
     Get all books.
-    Results are filtered by VPD based on current user's sensitivity level.
-    Optional filters: keyword (title/author), category_id, branch_id.
+    NOTE: Row-level filtering is enforced in `BookRepository` based on
+    user_type + branch_id + sensitivity_level (app-layer VPD simulation).
     """
     try:
         user_type = user_info.get("user_type")
+        user_branch_id = user_info.get("branch_id")
+        user_sensitivity = user_info.get("sensitivity_level")
         if keyword or category_id or branch_id:
-            return BookRepository.search(conn, keyword, category_id, branch_id, user_type)
-        return BookRepository.get_all(conn, user_type)
+            return BookRepository.search(
+                conn,
+                keyword=keyword,
+                category_id=category_id,
+                branch_id=branch_id,
+                user_type=user_type,
+                user_branch_id=user_branch_id,
+                user_sensitivity=user_sensitivity,
+            )
+        return BookRepository.get_all(
+            conn,
+            user_type=user_type,
+            user_branch_id=user_branch_id,
+            user_sensitivity=user_sensitivity,
+        )
     except oracledb.DatabaseError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

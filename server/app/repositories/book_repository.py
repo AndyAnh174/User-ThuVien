@@ -10,8 +10,23 @@ class BookRepository:
     """Repository for book-related database operations"""
     
     @staticmethod
-    def get_all(connection: oracledb.Connection, user_type: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get all books (filtered by VPD/Role based on sensitivity level)"""
+    def get_all(
+        connection: oracledb.Connection,
+        user_type: Optional[str] = None,
+        user_branch_id: Optional[int] = None,
+        user_sensitivity: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all books.
+        NOTE: Do NOT rely on database VPD/OLS alone here, because in some
+        deployment modes (proxy connections + DV) policy functions can raise
+        ORA-28112. Instead we enforce a conservative, role-based filter
+        at the application layer:
+          - ADMIN:       see all branches, all sensitivity levels
+          - LIBRARIAN:   only own branch, up to CONFIDENTIAL (no TOP_SECRET)
+          - STAFF:       only own branch, up to INTERNAL
+          - READER:      only own branch, PUBLIC only
+        """
         cursor = connection.cursor()
         
         query = """
@@ -25,9 +40,27 @@ class BookRepository:
         """
         params = {}
         
-        # Manual VPD/OLS simulation for READER
-        if user_type == 'READER':
-            query += " AND b.sensitivity_level = 'PUBLIC'"
+        # Manual VPD/OLS simulation per role
+        if user_type:
+            role = user_type.upper()
+            if role == "ADMIN":
+                # no extra filter – full access
+                pass
+            else:
+                # default: restrict to own branch if provided
+                if user_branch_id is not None:
+                    query += " AND b.branch_id = :user_branch_id"
+                    params["user_branch_id"] = user_branch_id
+
+                if role == "LIBRARIAN":
+                    # Up to CONFIDENTIAL
+                    query += " AND b.sensitivity_level IN ('PUBLIC','INTERNAL','CONFIDENTIAL')"
+                elif role == "STAFF":
+                    # Up to INTERNAL
+                    query += " AND b.sensitivity_level IN ('PUBLIC','INTERNAL')"
+                elif role == "READER":
+                    # PUBLIC only
+                    query += " AND b.sensitivity_level = 'PUBLIC'"
             
         query += " ORDER BY b.book_id"
         
@@ -56,12 +89,16 @@ class BookRepository:
         return dict(zip(columns, row)) if row else None
     
     @staticmethod
-    def search(connection: oracledb.Connection, 
-               keyword: Optional[str] = None,
-               category_id: Optional[int] = None,
-               branch_id: Optional[int] = None,
-               user_type: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Search books by keyword, category, or branch"""
+    def search(
+        connection: oracledb.Connection, 
+        keyword: Optional[str] = None,
+        category_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
+        user_type: Optional[str] = None,
+        user_branch_id: Optional[int] = None,
+        user_sensitivity: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search books by keyword, category, or branch with role-based filtering"""
         cursor = connection.cursor()
         
         query = """
@@ -74,9 +111,23 @@ class BookRepository:
         """
         params = {}
         
-        # Manual VPD/OLS simulation for READER
-        if user_type == 'READER':
-            query += " AND b.sensitivity_level = 'PUBLIC'"
+        # Manual VPD/OLS simulation per role
+        if user_type:
+            role = user_type.upper()
+            if role == "ADMIN":
+                pass
+            else:
+                # Always enforce own branch, ignore arbitrary branch filter
+                if user_branch_id is not None:
+                    query += " AND b.branch_id = :user_branch_id"
+                    params["user_branch_id"] = user_branch_id
+
+                if role == "LIBRARIAN":
+                    query += " AND b.sensitivity_level IN ('PUBLIC','INTERNAL','CONFIDENTIAL')"
+                elif role == "STAFF":
+                    query += " AND b.sensitivity_level IN ('PUBLIC','INTERNAL')"
+                elif role == "READER":
+                    query += " AND b.sensitivity_level = 'PUBLIC'"
         
         if keyword:
             query += " AND (UPPER(b.title) LIKE UPPER(:keyword) OR UPPER(b.author) LIKE UPPER(:keyword))"
@@ -86,7 +137,10 @@ class BookRepository:
             query += " AND b.category_id = :category_id"
             params["category_id"] = category_id
         
-        if branch_id:
+        # Additional explicit branch filter:
+        # - For ADMIN: allow arbitrary branch filter
+        # - For others: ignore client-supplied branch_id to avoid privilege escalation
+        if branch_id and (not user_type or user_type.upper() == "ADMIN"):
             query += " AND b.branch_id = :branch_id"
             params["branch_id"] = branch_id
         
