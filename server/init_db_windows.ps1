@@ -265,18 +265,26 @@ $EnableCDBDVOutput = $EnableCDBDVSql | docker exec -i $Container bash -c "sqlplu
 $EnableCDBDVOutput | Write-Host
 
 # Verify CDB DV is enabled before proceeding
-if ($EnableCDBDVOutput -match "ENABLED") {
-    Write-Host "CDB Database Vault is enabled. Proceeding with PDB setup..." -ForegroundColor Green
+# CDB DV status shows as "TRUE" for ENABLE_STATUS
+$CDBDVEnabled = $false
+if ($EnableCDBDVOutput -match "DV_ENABLE_STATUS\s+TRUE" -or $EnableCDBDVOutput -match "TRUE\s+TRUE" -or ($EnableCDBDVOutput -match "ENABLED" -and $EnableCDBDVOutput -notmatch "NOT")) {
+    $CDBDVEnabled = $true
+    Write-Host "✅ CDB Database Vault is enabled. Proceeding with PDB setup..." -ForegroundColor Green
 } else {
-    Write-Host "WARNING: CDB Database Vault may not be enabled. Checking status..." -ForegroundColor Yellow
+    Write-Host "Checking CDB DV status in detail..." -ForegroundColor Yellow
     $CheckCDBDVSql = @"
-SELECT STATUS FROM DBA_DV_STATUS;
+SELECT NAME, STATUS FROM DBA_DV_STATUS;
 EXIT;
 "@
     $CDBDVStatus = $CheckCDBDVSql | docker exec -i $Container bash -c "sqlplus -s '$CDBSecAdmin'" 2>&1
     $CDBDVStatus | Write-Host
-    if ($CDBDVStatus -notmatch "ENABLED") {
+    # Check for DV_ENABLE_STATUS = TRUE
+    if ($CDBDVStatus -match "DV_ENABLE_STATUS\s+TRUE") {
+        $CDBDVEnabled = $true
+        Write-Host "✅ CDB Database Vault is enabled. Proceeding with PDB setup..." -ForegroundColor Green
+    } else {
         Write-Host "ERROR: CDB Database Vault is not enabled. Cannot proceed with PDB DV setup." -ForegroundColor Red
+        Write-Host "CDB DV Status output: $CDBDVStatus" -ForegroundColor Yellow
         Write-Host "Please check CDB DV configuration manually." -ForegroundColor Yellow
         exit
     }
@@ -305,17 +313,12 @@ $GrantSql | docker exec -i $Container bash -c "sqlplus -s '$SysUser'" | Out-Null
 
 # 6.2c Enable DV in PDB (Run as SEC_ADMIN)
 # IMPORTANT: PDB DV can only be enabled if CDB DV is enabled
-Write-Host "Checking CDB DV status before enabling PDB DV..." -ForegroundColor Yellow
-$CheckCDBDVSql = @"
-SELECT STATUS FROM DBA_DV_STATUS;
-EXIT;
-"@
-$CDBDVCheck = $CheckCDBDVSql | docker exec -i $Container bash -c "sqlplus -s '$CDBSecAdmin'" 2>&1
-if ($CDBDVCheck -notmatch "ENABLED") {
+# Use the verified CDB DV status from above
+if (-not $CDBDVEnabled) {
     Write-Host "ERROR: CDB Database Vault is not enabled. Cannot enable PDB DV." -ForegroundColor Red
-    Write-Host "CDB DV Status: $CDBDVCheck" -ForegroundColor Yellow
     Write-Host "Skipping PDB DV enable. Realms will be set up but DV protection may not be active." -ForegroundColor Yellow
 } else {
+    Write-Host "✅ CDB DV is enabled. Proceeding with PDB DV setup..." -ForegroundColor Green
     # Wait for listener to be ready first
     Write-Host "Waiting for listener to register PDB service..." -ForegroundColor Yellow
     $ListenerReady = $false
@@ -422,26 +425,26 @@ EXIT;
         $RetryCount = 0
         $DBReady = $false
         while ($RetryCount -lt $MaxRetries) {
-        Start-Sleep -Seconds 5
-        $CheckSql = @"
+            Start-Sleep -Seconds 5
+            $CheckSql = @"
 SET PAGESIZE 0 FEEDBACK OFF;
 SELECT status FROM v`$instance;
 SELECT open_mode FROM v`$pdbs WHERE name = 'FREEPDB1';
 EXIT;
 "@
-        $Status = $CheckSql | docker exec -i $Container bash -c "sqlplus -s '$SysUser'" 2>&1
-        if ($Status -match "OPEN" -and $Status -match "READ WRITE") {
-            $DBReady = $true
-            break
-        }
+            $Status = $CheckSql | docker exec -i $Container bash -c "sqlplus -s '$SysUser'" 2>&1
+            if ($Status -match "OPEN" -and $Status -match "READ WRITE") {
+                $DBReady = $true
+                break
+            }
             Write-Host -NoNewline "."
             $RetryCount++
         }
 
         if (-not $DBReady) { 
-        Write-Host "`nFailed to start after PDB ODV enable" -ForegroundColor Red
-        Write-Host "Checking database status..." -ForegroundColor Yellow
-        $StatusSql = @"
+            Write-Host "`nFailed to start after PDB ODV enable" -ForegroundColor Red
+            Write-Host "Checking database status..." -ForegroundColor Yellow
+            $StatusSql = @"
 SELECT instance_name, status FROM v`$instance;
 SELECT name, open_mode FROM v`$pdbs;
 EXIT;
@@ -451,26 +454,27 @@ EXIT;
         }
 
         # Ensure PDB is open after restart (with safe check)
-    Write-Host "Ensuring PDB is open..." -ForegroundColor Yellow
-    $PDBCheckSql = @"
+        Write-Host "Ensuring PDB is open..." -ForegroundColor Yellow
+        $PDBCheckSql = @"
 ALTER SESSION SET CONTAINER = FREEPDB1;
 SELECT open_mode FROM v`$pdbs WHERE name = 'FREEPDB1';
 EXIT;
 "@
-    $PDBStatus = $PDBCheckSql | docker exec -i $Container bash -c "sqlplus -s '$SysUser'" 2>&1
-    # Only open if not already open/opening
-    if ($PDBStatus -match "MOUNTED" -or $PDBStatus -notmatch "READ WRITE") {
-        # Wait a bit to ensure PDB is not in opening state
-        Start-Sleep -Seconds 3
-        $PDBStatusCheck = $PDBCheckSql | docker exec -i $Container bash -c "sqlplus -s '$SysUser'" 2>&1
-        if ($PDBStatusCheck -match "MOUNTED") {
-            $OpenPDBSql = @"
+        $PDBStatus = $PDBCheckSql | docker exec -i $Container bash -c "sqlplus -s '$SysUser'" 2>&1
+        # Only open if not already open/opening
+        if ($PDBStatus -match "MOUNTED" -or $PDBStatus -notmatch "READ WRITE") {
+            # Wait a bit to ensure PDB is not in opening state
+            Start-Sleep -Seconds 3
+            $PDBStatusCheck = $PDBCheckSql | docker exec -i $Container bash -c "sqlplus -s '$SysUser'" 2>&1
+            if ($PDBStatusCheck -match "MOUNTED") {
+                $OpenPDBSql = @"
 ALTER SESSION SET CONTAINER = FREEPDB1;
 ALTER PLUGGABLE DATABASE FREEPDB1 OPEN;
 EXIT;
 "@
-            $OpenPDBSql | docker exec -i $Container bash -c "sqlplus -s '$SysUser'" | Out-Null
-            Start-Sleep -Seconds 2
+                $OpenPDBSql | docker exec -i $Container bash -c "sqlplus -s '$SysUser'" | Out-Null
+                Start-Sleep -Seconds 2
+            }
         }
         
         # Verify PDB DV still enabled after restart
