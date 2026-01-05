@@ -311,6 +311,10 @@ EXIT;
 "@
 $GrantSql | docker exec -i $Container bash -c "sqlplus -s '$SysUser'" | Out-Null
 
+# Wait a bit for CDB DV to be fully active after restart
+Write-Host "Waiting for CDB DV to be fully active..." -ForegroundColor Yellow
+Start-Sleep -Seconds 5
+
 # 6.2c Enable DV in PDB (Run as SEC_ADMIN)
 # IMPORTANT: PDB DV can only be enabled if CDB DV is enabled
 # Use the verified CDB DV status from above
@@ -340,7 +344,43 @@ if (-not $CDBDVEnabled) {
     Write-Host "Enabling DV in PDB (running as SEC_ADMIN)..." -ForegroundColor Yellow
     # Try connecting via local connection first (inside container)
     $SecAdminConnect = "sec_admin/SecAdmin123@localhost:1521/FREEPDB1"
-    $EnableDVSql = "@$SetupDir/18b_enable_dv_pdb.sql`nEXIT;"
+    
+    # First configure PDB DV
+    Write-Host "Configuring PDB DV..." -ForegroundColor Yellow
+    $ConfigurePDBDVSql = @"
+SET SERVEROUTPUT ON;
+BEGIN
+    DVSYS.CONFIGURE_DV(
+        dvowner_uname         => 'SEC_ADMIN',
+        dvacctmgr_uname       => 'DV_ACCTMGR_USER'
+    );
+    DBMS_OUTPUT.PUT_LINE('PDB Database Vault configured.');
+EXCEPTION 
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('PDB DV Config Warning: ' || SQLERRM);
+END;
+/
+SELECT NAME, STATUS FROM DBA_DV_STATUS;
+EXIT;
+"@
+    $ConfigureOutput = $ConfigurePDBDVSql | docker exec -i $Container bash -c "sqlplus -s '$SecAdminConnect'" 2>&1
+    $ConfigureOutput | Write-Host
+    
+    # Then enable PDB DV
+    Write-Host "Enabling PDB DV..." -ForegroundColor Yellow
+    $EnableDVSql = @"
+SET SERVEROUTPUT ON;
+BEGIN
+    DVSYS.DBMS_MACADM.ENABLE_DV;
+    DBMS_OUTPUT.PUT_LINE('PDB Database Vault enabled. RESTART REQUIRED.');
+EXCEPTION 
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('PDB DV Enable Error: ' || SQLERRM);
+END;
+/
+SELECT NAME, STATUS FROM DBA_DV_STATUS;
+EXIT;
+"@
     $EnableDVOutput = $EnableDVSql | docker exec -i $Container bash -c "sqlplus -s '$SecAdminConnect'" 2>&1
     $EnableDVOutput | Write-Host
 
@@ -353,8 +393,8 @@ EXIT;
     $PDBDVStatus = $VerifyPDBDVSql | docker exec -i $Container bash -c "sqlplus -s '$SecAdminConnect'" 2>&1
     $PDBDVStatus | Write-Host
     
-    $PDBDVEnabled = ($PDBDVStatus -match "DV_ENABLE_STATUS.*TRUE") -or ($PDBDVStatus -match "ENABLED")
-    $PDBDVConfigured = ($PDBDVStatus -match "DV_CONFIGURE_STATUS.*TRUE") -or ($PDBDVStatus -match "CONFIGURED")
+    $PDBDVEnabled = ($PDBDVStatus -match "DV_ENABLE_STATUS\s+TRUE")
+    $PDBDVConfigured = ($PDBDVStatus -match "DV_CONFIGURE_STATUS\s+TRUE")
 
     # Check if enable was successful or already enabled
     if (-not $PDBDVEnabled -and ($EnableDVOutput -match "ORA-12514" -or $EnableDVOutput -match "ORA-47503" -or ($EnableDVOutput -match "ORA-" -and $EnableDVOutput -notmatch "already enabled" -and $EnableDVOutput -notmatch "already exists" -and $EnableDVOutput -notmatch "ORA-00942"))) {

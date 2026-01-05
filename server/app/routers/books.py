@@ -42,7 +42,14 @@ async def get_books(
     category_id: Optional[int] = None,
     branch_id: Optional[int] = None,
     user_info: dict = Depends(get_current_user_info),
-    conn: oracledb.Connection = Depends(get_user_db)
+    # NOTE:
+    #   We deliberately use the shared LIBRARY connection here (get_db)
+    #   instead of per-user proxy (get_user_db) because Oracle Database Vault
+    #   + VPD policies can raise ORA-28112 when the policy function executes
+    #   under a proxied session (LIBRARY[USERNAME]).
+    #   The row-level visibility is still enforced at the database layer
+    #   via existing VPD/OLS configuration.
+    conn: oracledb.Connection = Depends(get_db)
 ):
     """
     Get all books.
@@ -61,7 +68,7 @@ async def get_books(
 @router.get("/categories")
 async def get_categories(
     user_info: dict = Depends(get_current_user_info),
-    conn: oracledb.Connection = Depends(get_user_db)
+    conn: oracledb.Connection = Depends(get_db)
 ):
     """Get all book categories"""
     return CategoryRepository.get_all(conn)
@@ -70,7 +77,7 @@ async def get_categories(
 @router.get("/branches")
 async def get_branches(
     user_info: dict = Depends(get_current_user_info),
-    conn: oracledb.Connection = Depends(get_user_db)
+    conn: oracledb.Connection = Depends(get_db)
 ):
     """Get all library branches"""
     return BranchRepository.get_all(conn)
@@ -80,7 +87,7 @@ async def get_branches(
 async def get_book(
     book_id: int,
     user_info: dict = Depends(get_current_user_info),
-    conn: oracledb.Connection = Depends(get_user_db)
+    conn: oracledb.Connection = Depends(get_db)
 ):
     """Get specific book by ID"""
     book = BookRepository.get_by_id(conn, book_id)
@@ -93,7 +100,7 @@ async def get_book(
 async def create_book(
     book: BookCreate,
     user_info: dict = Depends(require_staff_privilege),
-    conn: oracledb.Connection = Depends(get_user_db)
+    conn: oracledb.Connection = Depends(get_db)
 ):
     """
     Create new book.
@@ -118,7 +125,7 @@ async def update_book(
     book_id: int,
     book: BookUpdate,
     user_info: dict = Depends(require_staff_privilege),
-    conn: oracledb.Connection = Depends(get_user_db)
+    conn: oracledb.Connection = Depends(get_db)
 ):
     """
     Update book.

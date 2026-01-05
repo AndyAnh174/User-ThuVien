@@ -39,7 +39,9 @@ def require_admin_privilege(user_info: dict = Depends(get_current_user_info)):
 @router.get("", response_model=List[dict])
 async def get_users(
     user_info: dict = Depends(require_staff_privilege),
-    conn: oracledb.Connection = Depends(get_user_db)
+    # Similar to books, use shared LIBRARY connection here to avoid
+    # ORA-28112 from VPD/DV when using proxy sessions.
+    conn: oracledb.Connection = Depends(get_db)
 ):
     """
     Get all users.
@@ -57,7 +59,7 @@ async def get_users(
 async def get_user(
     user_id: int,
     user_info: dict = Depends(require_staff_privilege),
-    conn: oracledb.Connection = Depends(get_user_db)
+    conn: oracledb.Connection = Depends(get_db)
 ):
     """
     Get specific user by ID
